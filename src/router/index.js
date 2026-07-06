@@ -1,6 +1,23 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+const DEPT_ROUTES = {
+  '004': 'selector',
+  '007': 'selector',
+  '001': 'selector',
+  '002': 'selector',
+  '003': 'selector',
+  '005': 'selector',
+  '006': 'selector',
+}
+
+const SESSION_KEY = 'foraneos_module_chosen'
+
+function defaultRouteForUser(user) {
+  const deptId = String(user?.departmentId ?? user?.department_id ?? '').trim()
+  return DEPT_ROUTES[deptId] ?? 'selector'
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -13,8 +30,59 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: () => import('@/views/HomeView.vue'),
+      component: { render: () => null },
       meta: { requiresAuth: true },
+    },
+    {
+      path: '/cajas',
+      name: 'cajas',
+      component: () => import('@/views/CajasView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
+    },
+    {
+      path: '/selector',
+      name: 'selector',
+      component: () => import('@/views/ModuleSelectorView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/almacen',
+      name: 'almacen',
+      component: () => import('@/views/AlmacenView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
+    },
+    {
+      path: '/foraneos',
+      name: 'foraneos',
+      component: () => import('@/views/ForaneosView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
+    },
+    {
+      path: '/foraneos-reporte',
+      name: 'foraneos-reporte',
+      component: () => import('@/views/ForaneosRepView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
+    },
+    {
+      path: '/checkin-reporte',
+      name: 'checkin-reporte',
+      component: () => import('@/views/CheckinRepView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
     },
     {
       path: '/:pathMatch(.*)*',
@@ -26,12 +94,10 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
-  // Si hay token pero no se ha cargado el usuario (ej. recarga de página), restaurarlo
   if (auth.isAuthenticated && !auth.user) {
     try {
       await auth.fetchUser()
     } catch {
-      // Token inválido o expirado
       auth.logout()
       return { name: 'login' }
     }
@@ -42,8 +108,13 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.guest && auth.isAuthenticated) {
-    return { name: 'home' }
+    return { name: defaultRouteForUser(auth.user) }
+  }
+
+  if (to.name === 'home' && auth.user) {
+    return { name: defaultRouteForUser(auth.user) }
   }
 })
 
+export { SESSION_KEY }
 export default router
