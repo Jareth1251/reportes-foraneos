@@ -18,29 +18,11 @@ const searchText = ref('')
 const dateFrom   = ref('')
 const dateTo     = ref('')
 
-// ── Modales ───────────────────────────────────────────────────────────────
-const erpModal       = ref(null)  // { order, mode: 'update'|'merge' }
-const erpInput       = ref('')
-const surtidorModal  = ref(null)  // { order }
-const surtidorName   = ref('')
-const deliverModal   = ref(null)  // { order }
-const deliverCarrier = ref('')
-const deliverGuia    = ref('')
-const guiaModal      = ref(null)  // { order }
-const guiaInput      = ref('')
-const invoiceModal   = ref(null)  // { order }
-const invoiceInput   = ref('')
-const fiscalModal    = ref(null)  // { order }
-const fiscalRfc      = ref('')
-const fiscalRegimen  = ref('')
-const fiscalCfdi     = ref('')
-const toast          = ref(null)
-
+const toast = ref(null)
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 const dept      = computed(() => String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim())
 const isGerente = computed(() => dept.value === '001' || dept.value === '002')
-const myUsername = computed(() => auth.user?.username ?? auth.user?.sales_person_id ?? '')
 const myName     = computed(() => auth.user?.name ?? '')
 
 // ── Zonas fijas (igual que React) ────────────────────────────────────────
@@ -59,18 +41,6 @@ function zoneByCarrier(order) {
   if (c === 'cliente_pasa' || c === 'cliente-pasa' || c === 'cliente pasa' ||
       (c.includes('cliente') && c.includes('pasa'))) return 'VYIS'
   return 'VNAH'
-}
-
-function zoneMeta(key) { return ZONE_MAP[key] }
-
-const STATUS_COLOR = {
-  'aplicando pago': '#F59E0B',
-  'facturado':      '#06B6D4',
-  'surtiendo':      '#A855F7',
-  'surtido':        '#10B981',
-  'empacando':      '#3B82F6',
-  'enviado':        '#22C55E',
-  'entregado':      '#6B7280',
 }
 
 // ── Carga ────────────────────────────────────────────────────────────────
@@ -183,9 +153,11 @@ const filtered = computed(() => {
   })
 })
 
+// Solo agrupa 'aplicando pago' — igual que CajasView, los ya facturados pasan a almacén
 const groupsMap = computed(() => {
   const map = { VNAH: [], VDEP: [], VIDD: [], VYIS: [] }
   for (const o of filtered.value) {
+    if ((o.status ?? '').toLowerCase().trim() !== 'aplicando pago') continue
     map[zoneByCarrier(o)].push(o)
   }
   for (const key of Object.keys(map)) {
@@ -205,106 +177,6 @@ const visibleOrders = computed(() => {
 function showToast(type, message) {
   toast.value = { type, message }
   setTimeout(() => (toast.value = null), 3500)
-}
-
-async function run(res) {
-  if (res.ok) { showToast('success', 'Listo'); await load(false) }
-  else         showToast('error', res.message)
-}
-
-// ERP
-function openErpModal(order, mode = 'update') {
-  erpModal.value = { order, mode }
-  erpInput.value = mode === 'merge' ? '' : (order.erp_order_id ?? '')
-}
-async function confirmErp() {
-  const { order, mode } = erpModal.value
-  if (!erpInput.value.trim()) return
-  const res = mode === 'merge'
-    ? await store.mergeErp(order.id, erpInput.value.trim())
-    : await store.updateErp(order.id, erpInput.value.trim())
-  erpModal.value = null
-  await run(res)
-}
-
-// Surtidor
-function openSurtidorModal(order) { surtidorModal.value = { order }; surtidorName.value = '' }
-async function confirmSurtidor() {
-  const { order } = surtidorModal.value
-  if (!surtidorName.value.trim()) return
-  const res = await store.assignSurtidor(order.id, myUsername.value, surtidorName.value.trim())
-  surtidorModal.value = null
-  await run(res)
-}
-
-// Pack
-async function handlePack(order) { await run(await store.pack(order.id, myUsername.value, myName.value)) }
-
-// Deliver
-function openDeliverModal(order) {
-  deliverModal.value   = { order }
-  deliverCarrier.value = order.carrier ?? ''
-  deliverGuia.value    = order.guia ?? ''
-}
-async function confirmDeliver() {
-  const { order } = deliverModal.value
-  const res = await store.deliver(order.id, {
-    carrier:           deliverCarrier.value.trim() || undefined,
-    invoice_id:        order.invoice_id            || undefined,
-    guia:              deliverGuia.value.trim()    || undefined,
-    delivered_by_name: myName.value,
-  })
-  deliverModal.value = null
-  await run(res)
-}
-
-async function handleEntregado(order) {
-  await run(await store.deliver(order.id, {
-    carrier:           order.carrier    || undefined,
-    invoice_id:        order.invoice_id || undefined,
-    guia:              order.guia       || undefined,
-    delivered_by_name: myName.value,
-  }))
-}
-
-// Guía
-function openGuiaModal(order) { guiaModal.value = { order }; guiaInput.value = order.guia ?? '' }
-async function confirmGuia() {
-  const { order } = guiaModal.value
-  guiaModal.value = null
-  await run(await store.updateGuia(order.id, guiaInput.value.trim()))
-}
-
-// Factura
-function openInvoiceModal(order) { invoiceModal.value = { order }; invoiceInput.value = order.invoice_id ?? '' }
-async function confirmInvoice() {
-  const { order } = invoiceModal.value
-  if (!invoiceInput.value.trim()) return
-  invoiceModal.value = null
-  await run(await store.setInvoice(order.id, invoiceInput.value.trim()))
-}
-
-// Fiscal
-function openFiscalModal(order) {
-  fiscalModal.value  = { order }
-  fiscalRfc.value    = order.rfc ?? ''
-  fiscalRegimen.value = order.tax_regimen ?? ''
-  fiscalCfdi.value   = order.cfdi_use ?? ''
-}
-async function confirmFiscal() {
-  const { order } = fiscalModal.value
-  fiscalModal.value = null
-  await run(await store.updateFiscal(order.id, {
-    rfc:         fiscalRfc.value.trim()     || undefined,
-    tax_regimen: fiscalRegimen.value.trim() || undefined,
-    cfdi_use:    fiscalCfdi.value.trim()    || undefined,
-  }))
-}
-
-// Pasa tienda
-async function handlePasaTienda(order) {
-  if (!confirm(`¿Mover pedido ${order.erp_order_id} a tienda?`)) return
-  await run(await store.pasaTienda(order.id))
 }
 
 // Imprimir (igual que CajasView)

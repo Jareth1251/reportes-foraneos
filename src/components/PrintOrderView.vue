@@ -132,10 +132,8 @@ defineExpose({ print })
                   <b>Vendido a:</b> {{ ord.cliente }}<br>
                   <b>Comentarios:</b> {{ ord.comentarios }}<br>
                 </td>
-                <td></td>
                 <td>
                   <b>Fecha:</b> {{ ord.fecha }}<br>
-                  <b>Status:</b> {{ ord.status }}<br>
                   <b>Vendedor:</b> {{ ord.vendedor }}<br>
                   <b>Factura:</b> {{ ord.invoice || 'No requiere' }}<br>
                 </td>

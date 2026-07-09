@@ -18,6 +18,23 @@ function defaultRouteForUser(user) {
   return DEPT_ROUTES[deptId] ?? 'selector'
 }
 
+// Debe reflejar exactamente la asignación de módulos de ModuleSelectorView.vue
+function moduleRouteForDept(deptId) {
+  if (deptId === '004') return 'cajas'
+  if (deptId === '007') return 'almacen'
+  return 'foraneos'
+}
+
+function guardModuleRoute(routeName) {
+  return () => {
+    if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+
+    const auth   = useAuthStore()
+    const deptId = String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim()
+    if (moduleRouteForDept(deptId) !== routeName) return { name: 'selector' }
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -38,9 +55,7 @@ const router = createRouter({
       name: 'cajas',
       component: () => import('@/views/CajasView.vue'),
       meta: { requiresAuth: true },
-      beforeEnter: () => {
-        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
-      },
+      beforeEnter: guardModuleRoute('cajas'),
     },
     {
       path: '/selector',
@@ -53,18 +68,14 @@ const router = createRouter({
       name: 'almacen',
       component: () => import('@/views/AlmacenView.vue'),
       meta: { requiresAuth: true },
-      beforeEnter: () => {
-        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
-      },
+      beforeEnter: guardModuleRoute('almacen'),
     },
     {
       path: '/foraneos',
       name: 'foraneos',
       component: () => import('@/views/ForaneosView.vue'),
       meta: { requiresAuth: true },
-      beforeEnter: () => {
-        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
-      },
+      beforeEnter: guardModuleRoute('foraneos'),
     },
     {
       path: '/foraneos-reporte',
