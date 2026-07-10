@@ -8,6 +8,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   const foraneosForCajeras = ref([])
   const foraneosLoading = ref(false)
   const cajera004Names = ref(new Set())
+  const pageOrdersInvoicedCount = ref(null)
 
   async function loadCajera004() {
     try {
@@ -34,6 +35,18 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       foraneosForCajeras.value = []
     } finally {
       foraneosLoading.value = false
+    }
+  }
+
+  async function fetchPageOrdersInvoicedCount() {
+    try {
+      const { data } = await api.get('/orders/invoiced-count', {
+        params: { date_from: dateStart.value, date_to: dateEnd.value },
+      })
+      pageOrdersInvoicedCount.value = data?.count ?? 0
+    } catch (err) {
+      console.error('[fetchPageOrdersInvoicedCount]', err)
+      pageOrdersInvoicedCount.value = null
     }
   }
 
@@ -126,5 +139,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     fetchForaneosForCajeras,
     cajerasReport,
     cajeraTimingReport,
+    pageOrdersInvoicedCount,
+    fetchPageOrdersInvoicedCount,
   }
 }

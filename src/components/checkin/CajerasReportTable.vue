@@ -19,14 +19,21 @@ const {
   fetchForaneosForCajeras,
   cajerasReport,
   cajeraTimingReport,
+  pageOrdersInvoicedCount,
+  fetchPageOrdersInvoicedCount,
 } = useCajerasReport(toRef(props, 'rows'), toRef(props, 'dateStart'), toRef(props, 'dateEnd'))
 
-onMounted(fetchForaneosForCajeras)
-watch(() => [props.dateStart, props.dateEnd], fetchForaneosForCajeras)
+function fetchAll() {
+  fetchForaneosForCajeras()
+  fetchPageOrdersInvoicedCount()
+}
+
+onMounted(fetchAll)
+watch(() => [props.dateStart, props.dateEnd], fetchAll)
 
 function handleRefresh() {
   emit('refresh')
-  fetchForaneosForCajeras()
+  fetchAll()
 }
 
 function setQuickRange(type) {
@@ -62,11 +69,19 @@ async function exportCajeras() {
     { header: 'Total', key: 'total', width: 12 },
   ]
   cajerasReport.value.forEach((r) => wsResumen.addRow(r))
+  if (pageOrdersInvoicedCount.value != null) {
+    wsResumen.addRow({
+      cajera: 'PÁGINA WEB',
+      checkins: '—',
+      foraneos: '—',
+      total: pageOrdersInvoicedCount.value,
+    })
+  }
   const totalRow = wsResumen.addRow({
     cajera: 'TOTAL',
     checkins: cajerasReport.value.reduce((s, r) => s + r.checkins, 0),
     foraneos: cajerasReport.value.reduce((s, r) => s + r.foraneos, 0),
-    total: cajerasReport.value.reduce((s, r) => s + r.total, 0),
+    total: cajerasReport.value.reduce((s, r) => s + r.total, 0) + (pageOrdersInvoicedCount.value || 0),
   })
   totalRow.font = { bold: true }
   styleHeaderRow(wsResumen)
@@ -129,7 +144,7 @@ async function exportCajeras() {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="cajerasReport.length === 0">
+          <tr v-if="cajerasReport.length === 0 && pageOrdersInvoicedCount == null">
             <td colspan="4" class="text-center text-base-content/40">Sin registros.</td>
           </tr>
           <tr v-for="row in cajerasReport" :key="row.cajera" class="text-sm">
@@ -138,11 +153,17 @@ async function exportCajeras() {
             <td class="text-center">{{ row.foraneos }}</td>
             <td class="text-center font-bold">{{ row.total }}</td>
           </tr>
-          <tr v-if="cajerasReport.length > 0" class="font-bold bg-base-200 text-sm">
+          <tr v-if="pageOrdersInvoicedCount != null" class="text-sm">
+            <td class="font-medium">PÁGINA WEB</td>
+            <td class="text-center">—</td>
+            <td class="text-center">—</td>
+            <td class="text-center font-bold">{{ pageOrdersInvoicedCount }}</td>
+          </tr>
+          <tr v-if="cajerasReport.length > 0 || pageOrdersInvoicedCount != null" class="font-bold bg-base-200 text-sm">
             <td>TOTAL</td>
             <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.checkins, 0) }}</td>
             <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.foraneos, 0) }}</td>
-            <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.total, 0) }}</td>
+            <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.total, 0) + (pageOrdersInvoicedCount || 0) }}</td>
           </tr>
         </tbody>
       </table>
