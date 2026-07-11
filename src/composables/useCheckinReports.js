@@ -30,10 +30,12 @@ function buildGroupedOrderString(row) {
   const comment = String(row.comment || row.paused_comment || '').trim()
   if (!comment && !primary) return ''
   const cleaned = comment.replace(/^pedidos[^:]*:/i, '')
-  let orders = cleaned
-    .split(/[^A-Z0-9]+/i)
-    .map((p) => p.trim().toUpperCase())
-    .filter((p) => p.length > 0 && /\d/.test(p))
+  let orders = [...new Set(
+    cleaned
+      .split(/[^A-Z0-9]+/i)
+      .map((p) => p.trim().toUpperCase())
+      .filter((p) => p.length > 0 && /\d/.test(p))
+  )]
   if (primary && !orders.includes(primary)) orders.unshift(primary)
   if (!orders.length && primary) return primary
   return orders.join(', ')
