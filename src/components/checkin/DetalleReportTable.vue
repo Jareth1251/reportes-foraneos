@@ -15,6 +15,7 @@ const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refres
 
 const realDetail = computed(() => props.rows.filter((r) => Number(r.turn) > 0))
 const totalOrdersCount = computed(() => realDetail.value.reduce((acc, r) => acc + (r.erp_order_count || 0), 0))
+const fieldCount = Object.keys(DETALLE_FIELDS).length
 
 function exportDetalle() {
   exportToExcel(realDetail.value, DETALLE_FIELDS, `ReporteTurnos_${props.dateStart}_a_${props.dateEnd}.xlsx`)
@@ -47,30 +48,15 @@ function exportDetalle() {
       <table class="table table-sm">
         <thead>
           <tr class="text-sm">
-            <th>Turno</th><th>Cliente</th><th>Pedido</th><th>Cant.</th><th>Estado</th>
-            <th>Llegó</th><th>Registró Turno</th>
-            <th>Lo atendió piso</th><th>Se creó pedido</th><th>Lo atendió cajas</th>
-            <th>Finalizó Pago</th><th>Empezó a surtir</th><th>Se surtió</th>
-            <th>Empezó a entregar</th><th>Se entregó</th><th>Se canceló</th>
-            <th>T. atención piso</th><th>T. creación pedido</th><th>T. atención cajas</th>
-            <th>T. pago</th><th>T. en almacén</th><th>T. surtir</th><th>T. entrega</th>
-            <th>T. total tienda</th><th>Motivo pausa</th><th>T. pausado</th>
-            <th>Razón cancelación</th><th>Fecha</th>
+            <th v-for="(label, field) in DETALLE_FIELDS" :key="field">{{ label }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-if="realDetail.length === 0"><td colspan="27" class="text-center text-base-content/40">Sin registros.</td></tr>
+          <tr v-if="realDetail.length === 0"><td :colspan="fieldCount" class="text-center text-base-content/40">Sin registros.</td></tr>
           <tr v-for="(r, i) in realDetail" :key="r.id ?? i" class="text-sm">
-            <td>{{ r.turn }}</td><td class="max-w-48 truncate" :title="r.name">{{ r.name }}</td>
-            <td>{{ r.erp_order_grouped }}</td><td>{{ r.quantity }}</td><td>{{ r.status_label }}</td>
-            <td>{{ r.time_arrive_at }}</td><td>{{ r.usr_arrive_name }}</td>
-            <td>{{ r.time_creating_order_at }}</td><td>{{ r.time_order_created_at }}</td><td>{{ r.time_paying_at }}</td>
-            <td>{{ r.time_order_received_at }}</td><td>{{ r.time_at_stock_at }}</td><td>{{ r.time_stocked_at }}</td>
-            <td>{{ r.time_at_deliver_at }}</td><td>{{ r.time_delivered_at }}</td><td>{{ r.time_canceled_at }}</td>
-            <td>{{ r.diff_creating_order_at }}</td><td>{{ r.diff_order_created_at }}</td><td>{{ r.diff_paying_at }}</td>
-            <td>{{ r.diff_payment_time }}</td><td>{{ r.diff_warehouse_at }}</td><td>{{ r.diff_stocked_at }}</td><td>{{ r.diff_delivered_at }}</td>
-            <td>{{ r.diff_total_at }}</td><td>{{ r.paused_comment }}</td><td>{{ r.diffpaused_at }}</td>
-            <td>{{ r.cancel_comment }}</td><td>{{ String(r.arrive_at || '').slice(0, 10) }}</td>
+            <td v-for="(label, field) in DETALLE_FIELDS" :key="field" :class="{ 'max-w-48 truncate': field === 'name' }" :title="field === 'name' ? r.name : undefined">
+              {{ field === 'arrive_at' ? String(r.arrive_at || '').slice(0, 10) : r[field] }}
+            </td>
           </tr>
         </tbody>
       </table>

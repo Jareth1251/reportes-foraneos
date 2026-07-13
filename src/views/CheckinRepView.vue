@@ -16,11 +16,7 @@ const auth = useAuthStore()
 const deptId = computed(() => String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim())
 const spid = computed(() => String(auth.user?.salesPersonId || auth.user?.salespersonId || '').trim().toUpperCase())
 
-const site = computed(() => {
-  if (spid.value === 'VYAM') return '3000'
-  if (spid.value === 'VRAT') return '3100'
-  return auth.user?.site || auth.user?.pickup_branch || null
-})
+const site = computed(() => null)
 
 const canSeePisoReport = computed(() => deptId.value === '006' || spid.value === 'VYAM' || spid.value === 'VRAT')
 const canSeeCajerasReport = computed(() => ['001', '002'].includes(deptId.value) || ['VYAM', 'VRAT'].includes(spid.value))
