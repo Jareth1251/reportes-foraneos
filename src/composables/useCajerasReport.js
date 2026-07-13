@@ -7,27 +7,27 @@ const FACTURED_STATUSES = new Set(['facturado', 'surtiendo', 'surtido', 'empacan
 export function useCajerasReport(detail, dateStart, dateEnd) {
   const foraneosForCajeras = ref([])
   const foraneosLoading = ref(false)
-  const cajera004Names = ref(new Set())
+  const siteCajeraNames = ref(new Set())
   const pageOrdersInvoicedCount = ref(null)
 
-  async function loadCajera004() {
+  async function loadSiteCajeras() {
     try {
-      const res = await fetch('/node-api/users?department_id=004')
+      const res = await fetch('/node-api/users?site=3000')
       const rows = await res.json()
       const names = new Set()
       for (const u of (rows || [])) {
         if (u.name) names.add(String(u.name).trim().toUpperCase())
       }
-      cajera004Names.value = names
+      siteCajeraNames.value = names
     } catch (err) {
-      console.error('[loadCajera004]', err)
+      console.error('[loadSiteCajeras]', err)
     }
   }
 
   async function fetchForaneosForCajeras() {
     foraneosLoading.value = true
     try {
-      await loadCajera004()
+      await loadSiteCajeras()
       const { data } = await api.get('/foraneos', { params: { include_returned: 0, include_pasa: 1 } })
       foraneosForCajeras.value = Array.isArray(data) ? data : []
     } catch (err) {
@@ -55,7 +55,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const r of detail.value) {
       const nombre = String(r.usr_paying_name || r.usr_payed_name || '').trim()
       if (!nombre) continue
-      if (cajera004Names.value.size > 0 && !cajera004Names.value.has(nombre.toUpperCase())) continue
+      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(nombre.toUpperCase())) continue
       if (!r.order_received_at) continue
       checkinMap[nombre] = (checkinMap[nombre] || 0) + (r.erp_order_count || 1)
     }
@@ -66,6 +66,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const o of foraneosForCajeras.value) {
       const cajera = o.facturado_por_name
       if (!cajera) continue
+      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(cajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
       const facturadoAt = o.facturado_at ? new Date(o.facturado_at).getTime() : null
       if (facturadoAt) {
@@ -89,7 +90,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const r of detail.value) {
       const nombre = String(r.usr_paying_name || r.usr_payed_name || '').trim()
       if (!nombre) continue
-      if (cajera004Names.value.size > 0 && !cajera004Names.value.has(nombre.toUpperCase())) continue
+      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(nombre.toUpperCase())) continue
       if (!r.order_received_at) continue
       if (!checkinGroups[nombre]) checkinGroups[nombre] = []
       checkinGroups[nombre].push(r)
@@ -101,6 +102,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const o of foraneosForCajeras.value) {
       const cajera = o.facturado_por_name
       if (!cajera) continue
+      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(cajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
       if (!o.facturado_at || !o.created_at) continue
       const facturadoAt = new Date(o.facturado_at).getTime()
@@ -135,7 +137,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   return {
     foraneosForCajeras,
     foraneosLoading,
-    cajera004Names,
+    siteCajeraNames,
     fetchForaneosForCajeras,
     cajerasReport,
     cajeraTimingReport,
