@@ -80,6 +80,9 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const o of foraneosForCajeras.value) {
       const rawCajera = o.facturado_por_name
       if (!rawCajera) continue
+      // Cliente Pasa se cuenta como checkin (ver checkinMap), no como foráneo —
+      // si no, la misma factura se cuenta dos veces (aquí y en checkins).
+      if (String(o.carrier || '').toUpperCase() === 'CLIENTE') continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(rawCajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
       const facturadoAt = o.facturado_at ? new Date(o.facturado_at).getTime() : null
@@ -119,6 +122,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const o of foraneosForCajeras.value) {
       const rawCajera = o.facturado_por_name
       if (!rawCajera) continue
+      if (String(o.carrier || '').toUpperCase() === 'CLIENTE') continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(rawCajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
       if (!o.facturado_at || !o.created_at) continue
