@@ -57,6 +57,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       if (!nombre) continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(nombre.toUpperCase())) continue
       if (!r.order_received_at) continue
+      if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
       checkinMap[nombre] = (checkinMap[nombre] || 0) + (r.erp_order_count || 1)
     }
 
@@ -92,6 +93,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       if (!nombre) continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(nombre.toUpperCase())) continue
       if (!r.order_received_at) continue
+      if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
       if (!checkinGroups[nombre]) checkinGroups[nombre] = []
       checkinGroups[nombre].push(r)
     }
