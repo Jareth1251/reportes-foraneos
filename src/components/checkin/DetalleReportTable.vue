@@ -13,7 +13,19 @@ const props = defineProps({
 
 const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh'])
 
-const realDetail = computed(() => props.rows.filter((r) => Number(r.turn) > 0))
+const realDetail = computed(() => {
+  const start = props.dateStart ? new Date(props.dateStart + 'T00:00:00') : null
+  const end = props.dateEnd ? new Date(props.dateEnd + 'T23:59:59') : null
+  return props.rows.filter((r) => {
+    if (Number(r.turn) <= 0) return false
+    if (!r.arrive_at) return true
+    const d = new Date(r.arrive_at)
+    if (isNaN(d)) return true
+    if (start && d < start) return false
+    if (end && d > end) return false
+    return true
+  })
+})
 const totalOrdersCount = computed(() => realDetail.value.reduce((acc, r) => acc + (r.erp_order_count || 0), 0))
 const fieldCount = Object.keys(DETALLE_FIELDS).length
 

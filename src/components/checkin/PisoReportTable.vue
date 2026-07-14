@@ -18,9 +18,20 @@ const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refres
 const pisoAgentFilter = ref('')
 
 const pisoDetail = computed(() => {
+  const start = props.dateStart ? new Date(props.dateStart + 'T00:00:00') : null
+  const end = props.dateEnd ? new Date(props.dateEnd + 'T23:59:59') : null
+  const inRange = props.rows.filter((r) => {
+    if (!r.arrive_at) return true
+    const d = new Date(r.arrive_at)
+    if (isNaN(d)) return true
+    if (start && d < start) return false
+    if (end && d > end) return false
+    return true
+  })
+
   const q = normalize(pisoAgentFilter.value)
-  if (!q) return props.rows
-  return props.rows.filter((r) =>
+  if (!q) return inRange
+  return inRange.filter((r) =>
     normalize(r.usr_name_order_created || '').includes(q) ||
     normalize(r.usr_name_creating_order || '').includes(q) ||
     normalize(r.usr_name_canceled || '').includes(q),

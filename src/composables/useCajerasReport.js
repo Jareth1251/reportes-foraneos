@@ -73,9 +73,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
         if (fromTs && facturadoAt < fromTs) continue
         if (toTs   && facturadoAt > toTs)   continue
       }
-      const originalId = String(o.erp_order_id_original || o.erp_order_id || '').toUpperCase()
-      const ordersInRow = originalId.startsWith('PC') ? 1 : (1 + (o.erp_group_count || 0))
-      foraneosMap[cajera] = (foraneosMap[cajera] || 0) + ordersInRow
+      foraneosMap[cajera] = (foraneosMap[cajera] || 0) + 1
     }
 
     const allCajeras = new Set([...Object.keys(checkinMap), ...Object.keys(foraneosMap)])
