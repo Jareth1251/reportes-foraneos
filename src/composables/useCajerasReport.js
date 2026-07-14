@@ -8,6 +8,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   const foraneosForCajeras = ref([])
   const foraneosLoading = ref(false)
   const siteCajeraNames = ref(new Set())
+  const siteCajeraCanonical = ref(new Map())
   const pageOrdersInvoicedCount = ref(null)
 
   async function loadSiteCajeras() {
@@ -15,13 +16,24 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       const res = await fetch('/node-api/users?site=3000')
       const rows = await res.json()
       const names = new Set()
+      const canonical = new Map()
       for (const u of (rows || [])) {
-        if (u.name) names.add(String(u.name).trim().toUpperCase())
+        if (u.name) {
+          const key = String(u.name).trim().toUpperCase()
+          names.add(key)
+          canonical.set(key, String(u.name).trim())
+        }
       }
       siteCajeraNames.value = names
+      siteCajeraCanonical.value = canonical
     } catch (err) {
       console.error('[loadSiteCajeras]', err)
     }
+  }
+
+  function canonicalName(raw) {
+    const key = String(raw || '').trim().toUpperCase()
+    return siteCajeraCanonical.value.get(key) || String(raw || '').trim()
   }
 
   async function fetchForaneosForCajeras() {
@@ -53,11 +65,12 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   const cajerasReport = computed(() => {
     const checkinMap = {}
     for (const r of detail.value) {
-      const nombre = String(r.usr_paying_name || '').trim()
-      if (!nombre) continue
-      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(nombre.toUpperCase())) continue
+      const rawNombre = String(r.usr_paying_name || '').trim()
+      if (!rawNombre) continue
+      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(rawNombre.toUpperCase())) continue
       if (!r.order_received_at) continue
       if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
+      const nombre = canonicalName(rawNombre)
       checkinMap[nombre] = (checkinMap[nombre] || 0) + (r.erp_order_count || 1)
     }
 
@@ -65,15 +78,16 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     const toTs   = dateEnd.value   ? new Date(dateEnd.value   + 'T23:59:59').getTime() : null
     const foraneosMap = {}
     for (const o of foraneosForCajeras.value) {
-      const cajera = o.facturado_por_name
-      if (!cajera) continue
-      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(cajera).trim().toUpperCase())) continue
+      const rawCajera = o.facturado_por_name
+      if (!rawCajera) continue
+      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(rawCajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
       const facturadoAt = o.facturado_at ? new Date(o.facturado_at).getTime() : null
       if (facturadoAt) {
         if (fromTs && facturadoAt < fromTs) continue
         if (toTs   && facturadoAt > toTs)   continue
       }
+      const cajera = canonicalName(rawCajera)
       foraneosMap[cajera] = (foraneosMap[cajera] || 0) + 1
     }
 
@@ -89,11 +103,12 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   const cajeraTimingReport = computed(() => {
     const checkinGroups = {}
     for (const r of detail.value) {
-      const nombre = String(r.usr_paying_name || '').trim()
-      if (!nombre) continue
-      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(nombre.toUpperCase())) continue
+      const rawNombre = String(r.usr_paying_name || '').trim()
+      if (!rawNombre) continue
+      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(rawNombre.toUpperCase())) continue
       if (!r.order_received_at) continue
       if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
+      const nombre = canonicalName(rawNombre)
       if (!checkinGroups[nombre]) checkinGroups[nombre] = []
       checkinGroups[nombre].push(r)
     }
@@ -102,9 +117,9 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     const toTs   = dateEnd.value   ? new Date(dateEnd.value   + 'T23:59:59').getTime() : null
     const foraneosGroups = {}
     for (const o of foraneosForCajeras.value) {
-      const cajera = o.facturado_por_name
-      if (!cajera) continue
-      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(cajera).trim().toUpperCase())) continue
+      const rawCajera = o.facturado_por_name
+      if (!rawCajera) continue
+      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(rawCajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
       if (!o.facturado_at || !o.created_at) continue
       const facturadoAt = new Date(o.facturado_at).getTime()
@@ -113,6 +128,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       const createdAt = new Date(o.created_at).getTime()
       const diffSec = (facturadoAt - createdAt) / 1000
       if (diffSec < 0) continue
+      const cajera = canonicalName(rawCajera)
       if (!foraneosGroups[cajera]) foraneosGroups[cajera] = []
       foraneosGroups[cajera].push(diffSec)
     }
