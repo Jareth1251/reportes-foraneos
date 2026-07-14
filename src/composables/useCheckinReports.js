@@ -37,6 +37,10 @@ function buildGroupedOrderString(row) {
       .filter((p) => p.length > 0 && /\d/.test(p))
   )]
   if (primary && !orders.includes(primary)) orders.unshift(primary)
+
+  const consolidated = orders.filter((o) => o.startsWith('PC'))
+  if (consolidated.length > 0) orders = consolidated
+
   if (!orders.length && primary) return primary
   return orders.join(', ')
 }

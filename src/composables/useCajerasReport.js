@@ -53,7 +53,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   const cajerasReport = computed(() => {
     const checkinMap = {}
     for (const r of detail.value) {
-      const nombre = String(r.usr_paying_name || r.usr_payed_name || '').trim()
+      const nombre = String(r.usr_paying_name || '').trim()
       if (!nombre) continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(nombre.toUpperCase())) continue
       if (!r.order_received_at) continue
@@ -73,7 +73,9 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
         if (fromTs && facturadoAt < fromTs) continue
         if (toTs   && facturadoAt > toTs)   continue
       }
-      foraneosMap[cajera] = (foraneosMap[cajera] || 0) + (o.orders_total_count || 1)
+      const originalId = String(o.erp_order_id_original || o.erp_order_id || '').toUpperCase()
+      const ordersInRow = originalId.startsWith('PC') ? 1 : (1 + (o.erp_group_count || 0))
+      foraneosMap[cajera] = (foraneosMap[cajera] || 0) + ordersInRow
     }
 
     const allCajeras = new Set([...Object.keys(checkinMap), ...Object.keys(foraneosMap)])
@@ -88,7 +90,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   const cajeraTimingReport = computed(() => {
     const checkinGroups = {}
     for (const r of detail.value) {
-      const nombre = String(r.usr_paying_name || r.usr_payed_name || '').trim()
+      const nombre = String(r.usr_paying_name || '').trim()
       if (!nombre) continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(nombre.toUpperCase())) continue
       if (!r.order_received_at) continue
