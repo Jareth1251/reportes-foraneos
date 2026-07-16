@@ -14,12 +14,14 @@ const deptId = computed(() =>
 const MODULES = computed(() => {
   const reporte = { key: 'foraneos-reporte', icon: '📊', label: 'Reporte Foráneos', desc: 'Consultar el estado de pedidos, entregas y estadísticas por paquetería.', color: '#2E7D32', bg: '#E8F5E9', border: '#A5D6A7' }
   const checkinRep = { key: 'checkin-reporte', icon: '🎫', label: 'Reporte de Turnos', desc: 'Consultar turnos en espera, tiempos de atención y detalle por estatus.', color: '#B45309', bg: '#FEF3C7', border: '#FCD34D' }
+  const pedidosPaginaRep = { key: 'pedidos-pagina-reporte', icon: '🧾', label: 'Reporte Pedidos de Página', desc: 'Trazabilidad completa: tiempos por etapa, responsables y comprobante de pago.', color: '#7C3AED', bg: '#EDE9FE', border: '#C4B5FD' }
 
   if (deptId.value === '004') {
     return [
       { key: 'cajas', icon: '📦', label: 'Foráneos', desc: 'Gestionar llegadas, surtido, empaque y entrega de pedidos foráneos.', color: '#1565C0', bg: '#E3F2FD', border: '#90CAF9' },
       reporte,
       checkinRep,
+      pedidosPaginaRep,
     ]
   }
 
@@ -27,7 +29,7 @@ const MODULES = computed(() => {
     ? { key: 'almacen',  icon: '📦', label: 'Pedidos Foráneos',  desc: 'Gestionar llegadas, surtido, empaque y entrega de pedidos foráneos.', color: '#1565C0', bg: '#E3F2FD', border: '#90CAF9' }
     : { key: 'foraneos', icon: '📦', label: 'Checkins Foráneos', desc: 'Registrar llegadas, crear órdenes y gestionar el flujo de clientes foráneos.', color: '#1565C0', bg: '#E3F2FD', border: '#90CAF9' }
 
-  return [checkins, reporte, checkinRep]
+  return [checkins, reporte, checkinRep, pedidosPaginaRep]
 })
 
 function goTo(key) {

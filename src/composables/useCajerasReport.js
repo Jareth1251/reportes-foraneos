@@ -63,25 +63,27 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   }
 
   const cajerasReport = computed(() => {
+    const fromTs = dateStart.value ? new Date(dateStart.value + 'T00:00:00').getTime() : null
+    const toTs   = dateEnd.value   ? new Date(dateEnd.value   + 'T23:59:59').getTime() : null
+
     const checkinMap = {}
     for (const r of detail.value) {
       const rawNombre = String(r.usr_paying_name || '').trim()
       if (!rawNombre) continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(rawNombre.toUpperCase())) continue
       if (!r.order_received_at) continue
+      const receivedAt = new Date(r.order_received_at).getTime()
+      if (fromTs && receivedAt < fromTs) continue
+      if (toTs   && receivedAt > toTs)   continue
       if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
       const nombre = canonicalName(rawNombre)
       checkinMap[nombre] = (checkinMap[nombre] || 0) + (r.erp_order_count || 1)
     }
 
-    const fromTs = dateStart.value ? new Date(dateStart.value + 'T00:00:00').getTime() : null
-    const toTs   = dateEnd.value   ? new Date(dateEnd.value   + 'T23:59:59').getTime() : null
     const foraneosMap = {}
     for (const o of foraneosForCajeras.value) {
       const rawCajera = o.facturado_por_name
       if (!rawCajera) continue
-      // Cliente Pasa se cuenta como checkin (ver checkinMap), no como foráneo —
-      // si no, la misma factura se cuenta dos veces (aquí y en checkins).
       if (String(o.carrier || '').toUpperCase() === 'CLIENTE') continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(rawCajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
@@ -104,20 +106,24 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
   })
 
   const cajeraTimingReport = computed(() => {
+    const fromTs = dateStart.value ? new Date(dateStart.value + 'T00:00:00').getTime() : null
+    const toTs   = dateEnd.value   ? new Date(dateEnd.value   + 'T23:59:59').getTime() : null
+
     const checkinGroups = {}
     for (const r of detail.value) {
       const rawNombre = String(r.usr_paying_name || '').trim()
       if (!rawNombre) continue
       if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(rawNombre.toUpperCase())) continue
       if (!r.order_received_at) continue
+      const receivedAt = new Date(r.order_received_at).getTime()
+      if (fromTs && receivedAt < fromTs) continue
+      if (toTs   && receivedAt > toTs)   continue
       if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
       const nombre = canonicalName(rawNombre)
       if (!checkinGroups[nombre]) checkinGroups[nombre] = []
       checkinGroups[nombre].push(r)
     }
 
-    const fromTs = dateStart.value ? new Date(dateStart.value + 'T00:00:00').getTime() : null
-    const toTs   = dateEnd.value   ? new Date(dateEnd.value   + 'T23:59:59').getTime() : null
     const foraneosGroups = {}
     for (const o of foraneosForCajeras.value) {
       const rawCajera = o.facturado_por_name

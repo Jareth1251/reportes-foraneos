@@ -18,7 +18,6 @@ function defaultRouteForUser(user) {
   return DEPT_ROUTES[deptId] ?? 'selector'
 }
 
-// Debe reflejar exactamente la asignación de módulos de ModuleSelectorView.vue
 function moduleRouteForDept(deptId) {
   if (deptId === '004') return 'cajas'
   if (deptId === '007') return 'almacen'
@@ -90,6 +89,15 @@ const router = createRouter({
       path: '/checkin-reporte',
       name: 'checkin-reporte',
       component: () => import('@/views/CheckinRepView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
+    },
+    {
+      path: '/pedidos-pagina-reporte',
+      name: 'pedidos-pagina-reporte',
+      component: () => import('@/views/PedidosPaginaRepView.vue'),
       meta: { requiresAuth: true },
       beforeEnter: () => {
         if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
