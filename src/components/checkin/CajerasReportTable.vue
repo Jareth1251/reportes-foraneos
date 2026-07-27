@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, watch, toRef } from 'vue'
+import { onMounted, watch, toRef, ref, computed } from 'vue'
 import ExcelJS from 'exceljs'
 import DateRangeToolbar from './DateRangeToolbar.vue'
+import CajeraDetailModal from './CajeraDetailModal.vue'
 import { useCajerasReport } from '@/composables/useCajerasReport'
 import { styleHeaderRow, downloadWorkbook } from '@/utils/excelExport'
 
@@ -18,10 +19,21 @@ const {
   foraneosLoading,
   fetchForaneosForCajeras,
   cajerasReport,
+  cajerasDetail,
   cajeraTimingReport,
   pageOrdersInvoicedCount,
   fetchPageOrdersInvoicedCount,
 } = useCajerasReport(toRef(props, 'rows'), toRef(props, 'dateStart'), toRef(props, 'dateEnd'))
+
+const selectedCajera = ref(null)
+const selectedDetail = computed(() => selectedCajera.value ? (cajerasDetail.value[selectedCajera.value] || { checkinRows: [], foraneoRows: [] }) : null)
+
+function openCajeraDetail(cajera) {
+  selectedCajera.value = cajera
+}
+function closeCajeraDetail() {
+  selectedCajera.value = null
+}
 
 function fetchAll() {
   fetchForaneosForCajeras()
@@ -147,7 +159,12 @@ async function exportCajeras() {
           <tr v-if="cajerasReport.length === 0 && pageOrdersInvoicedCount == null">
             <td colspan="4" class="text-center text-base-content/40">Sin registros.</td>
           </tr>
-          <tr v-for="row in cajerasReport" :key="row.cajera" class="text-sm">
+          <tr
+            v-for="row in cajerasReport"
+            :key="row.cajera"
+            class="text-sm cursor-pointer hover:bg-base-200"
+            @click="openCajeraDetail(row.cajera)"
+          >
             <td class="font-medium">{{ row.cajera }}</td>
             <td class="text-center">{{ row.checkins }}</td>
             <td class="text-center">{{ row.foraneos }}</td>
@@ -193,5 +210,13 @@ async function exportCajeras() {
         </tbody>
       </table>
     </div>
+
+    <CajeraDetailModal
+      :open="!!selectedCajera"
+      :cajera="selectedCajera || ''"
+      :checkin-rows="selectedDetail?.checkinRows || []"
+      :foraneo-rows="selectedDetail?.foraneoRows || []"
+      @close="closeCajeraDetail"
+    />
   </div>
 </template>

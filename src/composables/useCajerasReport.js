@@ -12,6 +12,13 @@ function normalizeForMatch(s) {
     .toUpperCase()
 }
 
+// Un checkin queda facturado por dos ramas distintas segun el flujo:
+// order_received (entrega en piso) o agendado (recoge despues/pickup).
+// Cualquiera de las dos marca "ya se facturo".
+function checkinInvoicedAt(r) {
+  return r.order_received_at || r.agendado_at || null
+}
+
 export function useCajerasReport(detail, dateStart, dateEnd) {
   const foraneosForCajeras = ref([])
   const foraneosLoading = ref(false)
@@ -44,9 +51,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     }
   }
 
-  // Devuelve null si el nombre no pertenece a ninguna cajera del whitelist
-  // (site 3000): el llamador debe descartar esa fila. Matchea sin importar
-  // acentos (Peña ~ Pena) para no perder gente por variantes de captura.
+  // null significa "no es cajera del whitelist de site 3000": el llamador descarta la fila.
   function canonicalName(raw) {
     const trimmed = String(raw || '').trim()
     if (!trimmed) return null
@@ -82,25 +87,29 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     }
   }
 
-  const cajerasReport = computed(() => {
+  // Agrupa los checkins/foraneos crudos que componen cada cajera, para que
+  // la UI pueda mostrar el detalle (drill-down) detras de cada conteo.
+  const cajerasDetail = computed(() => {
     const fromTs = dateStart.value ? new Date(dateStart.value + 'T00:00:00').getTime() : null
     const toTs   = dateEnd.value   ? new Date(dateEnd.value   + 'T23:59:59').getTime() : null
 
-    const checkinMap = {}
+    const map = {}
+    const bucket = (cajera) => (map[cajera] ||= { checkinRows: [], foraneoRows: [] })
+
     for (const r of detail.value) {
       const rawNombre = String(r.usr_paying_name || '').trim()
       if (!rawNombre) continue
-      if (!r.order_received_at) continue
-      const receivedAt = new Date(r.order_received_at).getTime()
+      const invoicedAt = checkinInvoicedAt(r)
+      if (!invoicedAt) continue
+      const receivedAt = new Date(invoicedAt).getTime()
       if (fromTs && receivedAt < fromTs) continue
       if (toTs   && receivedAt > toTs)   continue
       if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
       const nombre = canonicalName(rawNombre)
       if (!nombre) continue
-      checkinMap[nombre] = (checkinMap[nombre] || 0) + (r.erp_order_count || 1)
+      bucket(nombre).checkinRows.push(r)
     }
 
-    const foraneosMap = {}
     for (const o of foraneosForCajeras.value) {
       const rawCajera = o.facturado_por_name
       if (!rawCajera) continue
@@ -113,16 +122,20 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       }
       const cajera = canonicalName(rawCajera)
       if (!cajera) continue
-      foraneosMap[cajera] = (foraneosMap[cajera] || 0) + 1
+      bucket(cajera).foraneoRows.push(o)
     }
 
-    const allCajeras = new Set([...Object.keys(checkinMap), ...Object.keys(foraneosMap)])
-    return Array.from(allCajeras).map(cajera => ({
-      cajera,
-      checkins: checkinMap[cajera] || 0,
-      foraneos: foraneosMap[cajera] || 0,
-      total: (checkinMap[cajera] || 0) + (foraneosMap[cajera] || 0),
-    })).sort((a, b) => b.total - a.total)
+    return map
+  })
+
+  const cajerasReport = computed(() => {
+    const map = cajerasDetail.value
+    return Object.keys(map).map(cajera => {
+      const { checkinRows, foraneoRows } = map[cajera]
+      const checkins = checkinRows.reduce((s, r) => s + (r.erp_order_count || 1), 0)
+      const foraneos = foraneoRows.length
+      return { cajera, checkins, foraneos, total: checkins + foraneos }
+    }).sort((a, b) => b.total - a.total)
   })
 
   const cajeraTimingReport = computed(() => {
@@ -133,8 +146,9 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const r of detail.value) {
       const rawNombre = String(r.usr_paying_name || '').trim()
       if (!rawNombre) continue
-      if (!r.order_received_at) continue
-      const receivedAt = new Date(r.order_received_at).getTime()
+      const invoicedAt = checkinInvoicedAt(r)
+      if (!invoicedAt) continue
+      const receivedAt = new Date(invoicedAt).getTime()
       if (fromTs && receivedAt < fromTs) continue
       if (toTs   && receivedAt > toTs)   continue
       if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
@@ -189,6 +203,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     siteCajeraNames,
     fetchForaneosForCajeras,
     cajerasReport,
+    cajerasDetail,
     cajeraTimingReport,
     pageOrdersInvoicedCount,
     fetchPageOrdersInvoicedCount,
