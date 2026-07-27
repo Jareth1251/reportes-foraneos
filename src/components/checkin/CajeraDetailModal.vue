@@ -1,4 +1,6 @@
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   open: { type: Boolean, default: false },
   cajera: { type: String, default: '' },
@@ -18,6 +20,20 @@ function fmtDateTime(dt) {
 function checkinInvoicedAt(r) {
   return r.order_received_at || r.agendado_at || null
 }
+
+// Un turno puede traer varios pedidos (erp_order_grouped separado por comas);
+// se expande a una fila por pedido para que cuadre con el conteo de la tabla.
+const expandedCheckins = computed(() => {
+  const out = []
+  for (const r of props.checkinRows) {
+    const pedidos = String(r.erp_order_grouped || r.erp_order_id || '')
+      .split(',').map(s => s.trim()).filter(Boolean)
+    for (const pedido of (pedidos.length ? pedidos : ['—'])) {
+      out.push({ ...r, pedido })
+    }
+  }
+  return out
+})
 </script>
 
 <template>
@@ -25,7 +41,7 @@ function checkinInvoicedAt(r) {
     <div v-if="open" class="modal-box max-w-4xl">
       <h3 class="font-bold text-lg mb-1">{{ cajera }}</h3>
       <p class="text-sm text-base-content/60 mb-4">
-        {{ checkinRows.length }} checkin(s) · {{ foraneoRows.length }} foráneo(s)
+        {{ expandedCheckins.length }} pedido(s) en {{ checkinRows.length }} turno(s) · {{ foraneoRows.length }} foráneo(s)
       </p>
 
       <h4 class="font-semibold text-sm mb-2">Checkins Facturados</h4>
@@ -41,12 +57,12 @@ function checkinInvoicedAt(r) {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="checkinRows.length === 0">
+            <tr v-if="expandedCheckins.length === 0">
               <td colspan="5" class="text-center text-base-content/40">Sin checkins.</td>
             </tr>
-            <tr v-for="r in checkinRows" :key="r.id">
+            <tr v-for="(r, i) in expandedCheckins" :key="`${r.id}-${i}`">
               <td>{{ r.turn }}</td>
-              <td>{{ r.erp_order_grouped || r.erp_order_id || '—' }}</td>
+              <td>{{ r.pedido }}</td>
               <td>{{ r.name || '—' }}</td>
               <td>{{ fmtDateTime(checkinInvoicedAt(r)) }}</td>
               <td>{{ r.status }}</td>
