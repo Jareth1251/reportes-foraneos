@@ -65,7 +65,7 @@ const expandedCheckins = computed(() => {
               <td>{{ r.pedido }}</td>
               <td>{{ r.name || '—' }}</td>
               <td>{{ fmtDateTime(checkinInvoicedAt(r)) }}</td>
-              <td>{{ r.status }}</td>
+              <td>{{ r.status_label || r.status }}</td>
             </tr>
           </tbody>
         </table>
