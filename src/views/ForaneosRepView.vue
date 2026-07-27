@@ -342,7 +342,14 @@ async function fetchOrders() {
   loading.value = true
   try {
     await loadCashierCodes()
-    const { data } = await api.get('/foraneos', { params: { include_returned: 1, include_pasa: 1 } })
+    const { data } = await api.get('/foraneos', {
+      params: {
+        include_returned: 1,
+        include_pasa: 1,
+        from: filterFrom.value,
+        to: filterTo.value,
+      },
+    })
 
     const keyOf = o => String(o.erp_order_id || '').trim().toUpperCase() || `id:${o.id}`
     const timeValue = o => Math.max(...[o.last_status_change_at, o.returned_at, o.changed_erp_at, o.facturado_at, o.created_at].map(v => v ? new Date(v).getTime() : 0))
@@ -396,7 +403,7 @@ function setQuickRange(type) {
     filterFrom.value = ymdLocal(new Date(today.getFullYear(), today.getMonth(), 1))
     filterTo.value   = ymdLocal(new Date(today.getFullYear(), today.getMonth() + 1, 0))
   }
-  recomputeFiltered()
+  fetchOrders()
 }
 
 // ── Buckets ───────────────────────────────────────────────────────────────
@@ -568,11 +575,11 @@ onMounted(fetchOrders)
       <div class="flex gap-2 items-center">
         <div class="flex flex-col gap-0.5">
           <label class="text-[10px] text-base-content/50 leading-none">Desde</label>
-          <input type="date" v-model="filterFrom" class="input input-bordered input-xs w-36" @change="recomputeFiltered" />
+          <input type="date" v-model="filterFrom" class="input input-bordered input-xs w-36" @change="fetchOrders" />
         </div>
         <div class="flex flex-col gap-0.5">
           <label class="text-[10px] text-base-content/50 leading-none">Hasta</label>
-          <input type="date" v-model="filterTo" class="input input-bordered input-xs w-36" @change="recomputeFiltered" />
+          <input type="date" v-model="filterTo" class="input input-bordered input-xs w-36" @change="fetchOrders" />
         </div>
       </div>
       <div class="flex gap-1">
