@@ -12,9 +12,6 @@ function normalizeForMatch(s) {
     .toUpperCase()
 }
 
-// Un checkin queda facturado por dos ramas distintas segun el flujo:
-// order_received (entrega en piso) o agendado (recoge despues/pickup).
-// Cualquiera de las dos marca "ya se facturo".
 function checkinInvoicedAt(r) {
   return r.order_received_at || r.agendado_at || null
 }
@@ -51,7 +48,6 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     }
   }
 
-  // null significa "no es cajera del whitelist de site 3000": el llamador descarta la fila.
   function canonicalName(raw) {
     const trimmed = String(raw || '').trim()
     if (!trimmed) return null
@@ -65,7 +61,14 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     foraneosLoading.value = true
     try {
       await loadSiteCajeras()
-      const { data } = await api.get('/foraneos', { params: { include_returned: 0, include_pasa: 1 } })
+      const { data } = await api.get('/foraneos', {
+        params: {
+          include_returned: 0,
+          include_pasa: 1,
+          date_from: dateStart.value,
+          date_to: dateEnd.value,
+        },
+      })
       foraneosForCajeras.value = Array.isArray(data) ? data : []
     } catch (err) {
       console.error(err)
@@ -87,8 +90,6 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     }
   }
 
-  // Agrupa los checkins/foraneos crudos que componen cada cajera, para que
-  // la UI pueda mostrar el detalle (drill-down) detras de cada conteo.
   const cajerasDetail = computed(() => {
     const fromTs = dateStart.value ? new Date(dateStart.value + 'T00:00:00').getTime() : null
     const toTs   = dateEnd.value   ? new Date(dateEnd.value   + 'T23:59:59').getTime() : null
