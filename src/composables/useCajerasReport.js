@@ -44,14 +44,16 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     }
   }
 
+  // Devuelve null si el nombre no pertenece a ninguna cajera del whitelist
+  // (site 3000): el llamador debe descartar esa fila. Matchea sin importar
+  // acentos (Peña ~ Pena) para no perder gente por variantes de captura.
   function canonicalName(raw) {
     const trimmed = String(raw || '').trim()
-    if (!trimmed) return trimmed
+    if (!trimmed) return null
+    if (siteCajeraNames.value.size === 0) return trimmed
     const key = trimmed.toUpperCase()
     if (siteCajeraCanonical.value.has(key)) return siteCajeraCanonical.value.get(key)
-    const normalized = siteCajeraNormalized.value.get(normalizeForMatch(trimmed))
-    if (normalized) return normalized
-    return siteCajeraNames.value.size > 0 ? `${trimmed} (sin match)` : trimmed
+    return siteCajeraNormalized.value.get(normalizeForMatch(trimmed)) || null
   }
 
   async function fetchForaneosForCajeras() {
@@ -94,6 +96,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       if (toTs   && receivedAt > toTs)   continue
       if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
       const nombre = canonicalName(rawNombre)
+      if (!nombre) continue
       checkinMap[nombre] = (checkinMap[nombre] || 0) + (r.erp_order_count || 1)
     }
 
@@ -109,6 +112,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
         if (toTs   && facturadoAt > toTs)   continue
       }
       const cajera = canonicalName(rawCajera)
+      if (!cajera) continue
       foraneosMap[cajera] = (foraneosMap[cajera] || 0) + 1
     }
 
@@ -135,6 +139,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       if (toTs   && receivedAt > toTs)   continue
       if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase().trim())) continue
       const nombre = canonicalName(rawNombre)
+      if (!nombre) continue
       if (!checkinGroups[nombre]) checkinGroups[nombre] = []
       checkinGroups[nombre].push(r)
     }
@@ -154,6 +159,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       const diffSec = (facturadoAt - createdAt) / 1000
       if (diffSec < 0) continue
       const cajera = canonicalName(rawCajera)
+      if (!cajera) continue
       if (!foraneosGroups[cajera]) foraneosGroups[cajera] = []
       foraneosGroups[cajera].push(diffSec)
     }
