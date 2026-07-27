@@ -4,11 +4,20 @@ import { toTime, getAverageTime } from '@/utils/reportTime'
 
 const FACTURED_STATUSES = new Set(['facturado', 'surtiendo', 'surtido', 'empacando', 'enviando', 'enviado', 'entregado'])
 
+function normalizeForMatch(s) {
+  return String(s || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+}
+
 export function useCajerasReport(detail, dateStart, dateEnd) {
   const foraneosForCajeras = ref([])
   const foraneosLoading = ref(false)
   const siteCajeraNames = ref(new Set())
   const siteCajeraCanonical = ref(new Map())
+  const siteCajeraNormalized = ref(new Map())
   const pageOrdersInvoicedCount = ref(null)
 
   async function loadSiteCajeras() {
@@ -17,23 +26,32 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       const rows = await res.json()
       const names = new Set()
       const canonical = new Map()
+      const normalized = new Map()
       for (const u of (rows || [])) {
         if (u.name) {
-          const key = String(u.name).trim().toUpperCase()
+          const trimmed = String(u.name).trim()
+          const key = trimmed.toUpperCase()
           names.add(key)
-          canonical.set(key, String(u.name).trim())
+          canonical.set(key, trimmed)
+          normalized.set(normalizeForMatch(trimmed), trimmed)
         }
       }
       siteCajeraNames.value = names
       siteCajeraCanonical.value = canonical
+      siteCajeraNormalized.value = normalized
     } catch (err) {
       console.error('[loadSiteCajeras]', err)
     }
   }
 
   function canonicalName(raw) {
-    const key = String(raw || '').trim().toUpperCase()
-    return siteCajeraCanonical.value.get(key) || String(raw || '').trim()
+    const trimmed = String(raw || '').trim()
+    if (!trimmed) return trimmed
+    const key = trimmed.toUpperCase()
+    if (siteCajeraCanonical.value.has(key)) return siteCajeraCanonical.value.get(key)
+    const normalized = siteCajeraNormalized.value.get(normalizeForMatch(trimmed))
+    if (normalized) return normalized
+    return siteCajeraNames.value.size > 0 ? `${trimmed} (sin match)` : trimmed
   }
 
   async function fetchForaneosForCajeras() {
@@ -70,7 +88,6 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const r of detail.value) {
       const rawNombre = String(r.usr_paying_name || '').trim()
       if (!rawNombre) continue
-      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(rawNombre.toUpperCase())) continue
       if (!r.order_received_at) continue
       const receivedAt = new Date(r.order_received_at).getTime()
       if (fromTs && receivedAt < fromTs) continue
@@ -85,7 +102,6 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       const rawCajera = o.facturado_por_name
       if (!rawCajera) continue
       if (String(o.carrier || '').toUpperCase() === 'CLIENTE') continue
-      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(rawCajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
       const facturadoAt = o.facturado_at ? new Date(o.facturado_at).getTime() : null
       if (facturadoAt) {
@@ -113,7 +129,6 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     for (const r of detail.value) {
       const rawNombre = String(r.usr_paying_name || '').trim()
       if (!rawNombre) continue
-      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(rawNombre.toUpperCase())) continue
       if (!r.order_received_at) continue
       const receivedAt = new Date(r.order_received_at).getTime()
       if (fromTs && receivedAt < fromTs) continue
@@ -129,8 +144,8 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
       const rawCajera = o.facturado_por_name
       if (!rawCajera) continue
       if (String(o.carrier || '').toUpperCase() === 'CLIENTE') continue
-      if (siteCajeraNames.value.size > 0 && !siteCajeraNames.value.has(String(rawCajera).trim().toUpperCase())) continue
       if (!FACTURED_STATUSES.has(String(o.status || '').toLowerCase().trim())) continue
+      if (String(o.order_status || '').toUpperCase() === 'CANCELADO') continue
       if (!o.facturado_at || !o.created_at) continue
       const facturadoAt = new Date(o.facturado_at).getTime()
       if (fromTs && facturadoAt < fromTs) continue
