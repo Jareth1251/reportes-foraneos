@@ -65,8 +65,8 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
         params: {
           include_returned: 0,
           include_pasa: 1,
-          date_from: dateStart.value,
-          date_to: dateEnd.value,
+          from: dateStart.value,
+          to: dateEnd.value,
         },
       })
       foraneosForCajeras.value = Array.isArray(data) ? data : []
