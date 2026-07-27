@@ -34,6 +34,20 @@ const expandedCheckins = computed(() => {
   }
   return out
 })
+
+// Un turno foráneo puede traer varios pedidos consolidados (remote_order_groups);
+// se expande a una fila por pedido para que cuadre con orders_total_count.
+const expandedForaneos = computed(() => {
+  const out = []
+  for (const o of props.foraneoRows) {
+    const pedidos = [o.erp_order_id, ...(o.erp_group_list || [])]
+      .map(s => String(s || '').trim()).filter(Boolean)
+    for (const pedido of (pedidos.length ? pedidos : ['—'])) {
+      out.push({ ...o, pedido })
+    }
+  }
+  return out
+})
 </script>
 
 <template>
@@ -41,7 +55,7 @@ const expandedCheckins = computed(() => {
     <div v-if="open" class="modal-box max-w-4xl">
       <h3 class="font-bold text-lg mb-1">{{ cajera }}</h3>
       <p class="text-sm text-base-content/60 mb-4">
-        {{ expandedCheckins.length }} pedido(s) en {{ checkinRows.length }} turno(s) · {{ foraneoRows.length }} foráneo(s)
+        {{ expandedCheckins.length }} pedido(s) en {{ checkinRows.length }} turno(s) · {{ expandedForaneos.length }} foráneo(s) en {{ foraneoRows.length }} turno(s)
       </p>
 
       <h4 class="font-semibold text-sm mb-2">Checkins Facturados</h4>
@@ -84,11 +98,11 @@ const expandedCheckins = computed(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="foraneoRows.length === 0">
+            <tr v-if="expandedForaneos.length === 0">
               <td colspan="5" class="text-center text-base-content/40">Sin foráneos.</td>
             </tr>
-            <tr v-for="o in foraneoRows" :key="o.id">
-              <td>{{ o.erp_group_csv || o.erp_order_id || '—' }}</td>
+            <tr v-for="(o, i) in expandedForaneos" :key="`${o.id}-${i}`">
+              <td>{{ o.pedido }}</td>
               <td>{{ o.customer_name || '—' }}</td>
               <td>{{ o.carrier || '—' }}</td>
               <td>{{ fmtDateTime(o.facturado_at) }}</td>

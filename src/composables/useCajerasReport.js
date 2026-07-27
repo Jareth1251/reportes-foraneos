@@ -134,7 +134,7 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     return Object.keys(map).map(cajera => {
       const { checkinRows, foraneoRows } = map[cajera]
       const checkins = checkinRows.reduce((s, r) => s + (r.erp_order_count || 1), 0)
-      const foraneos = foraneoRows.length
+      const foraneos = foraneoRows.reduce((s, o) => s + (o.orders_total_count || (1 + (o.erp_group_count || 0))), 0)
       return { cajera, checkins, foraneos, total: checkins + foraneos }
     }).sort((a, b) => b.total - a.total)
   })
