@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { api } from '@/config/axios'
 import { toTime, getAverageTime } from '@/utils/reportTime'
+import { collapseConsolidatedPedidos } from '@/utils/pedidos'
 
 const FACTURED_STATUSES = new Set(['facturado', 'surtiendo', 'surtido', 'empacando', 'enviando', 'enviado', 'entregado'])
 
@@ -134,7 +135,10 @@ export function useCajerasReport(detail, dateStart, dateEnd) {
     return Object.keys(map).map(cajera => {
       const { checkinRows, foraneoRows } = map[cajera]
       const checkins = checkinRows.reduce((s, r) => s + (r.erp_order_count || 1), 0)
-      const foraneos = foraneoRows.reduce((s, o) => s + (o.orders_total_count || (1 + (o.erp_group_count || 0))), 0)
+      const foraneos = foraneoRows.reduce((s, o) => {
+        const pedidos = collapseConsolidatedPedidos([o.erp_order_id, ...(o.erp_group_list || [])])
+        return s + pedidos.length
+      }, 0)
       return { cajera, checkins, foraneos, total: checkins + foraneos }
     }).sort((a, b) => b.total - a.total)
   })

@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { collapseConsolidatedPedidos } from '@/utils/pedidos'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -36,12 +37,12 @@ const expandedCheckins = computed(() => {
 })
 
 // Un turno foráneo puede traer varios pedidos consolidados (remote_order_groups);
-// se expande a una fila por pedido para que cuadre con orders_total_count.
+// se expande a una fila por pedido, colapsando los que ya quedaron fusionados
+// en un PC, para que cuadre con el conteo del reporte.
 const expandedForaneos = computed(() => {
   const out = []
   for (const o of props.foraneoRows) {
-    const pedidos = [o.erp_order_id, ...(o.erp_group_list || [])]
-      .map(s => String(s || '').trim()).filter(Boolean)
+    const pedidos = collapseConsolidatedPedidos([o.erp_order_id, ...(o.erp_group_list || [])])
     for (const pedido of (pedidos.length ? pedidos : ['—'])) {
       out.push({ ...o, pedido })
     }
