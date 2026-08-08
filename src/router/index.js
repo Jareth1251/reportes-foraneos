@@ -104,6 +104,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/indicadores-reporte',
+      name: 'indicadores-reporte',
+      component: () => import('@/views/IndicadoresRepView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },
