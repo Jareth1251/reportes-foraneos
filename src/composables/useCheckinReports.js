@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { fmtTime, timeDiff } from '@/utils/reportTime'
+import { buildGroupedOrderString } from '@/utils/pedidos'
 
 const DIFF_MAP = {
   diff_creating_order_at: ['arrive_at', 'creating_order_at'],
@@ -24,26 +25,6 @@ const DIFF_MAP = {
 const TIME_FIELDS = ['arrive_at', 'creating_order_at', 'order_created_at', 'paying_at', 'transferencia_at', 'payed_at', 'order_received_at', 'at_stock_at', 'stocked_at', 'at_deliver_at', 'delivered_at', 'canceled_at']
 
 const STATUS_KEYS = ['arrive', 'creating_order', 'order_created', 'paying', 'payed', 'order_received', 'at_stock', 'stocked', 'at_deliver', 'delivered', 'canceled', 'transferencia', 'paused']
-
-function buildGroupedOrderString(row) {
-  const primary = String(row.erp_order_id || '').toUpperCase()
-  const comment = String(row.comment || row.paused_comment || '').trim()
-  if (!comment && !primary) return ''
-  const cleaned = comment.replace(/^pedidos[^:]*:/i, '')
-  let orders = [...new Set(
-    cleaned
-      .split(/[^A-Z0-9]+/i)
-      .map((p) => p.trim().toUpperCase())
-      .filter((p) => p.length > 0 && /\d/.test(p))
-  )]
-  if (primary && !orders.includes(primary)) orders.unshift(primary)
-
-  const consolidated = orders.filter((o) => o.startsWith('PC'))
-  if (consolidated.length > 0) orders = consolidated
-
-  if (!orders.length && primary) return primary
-  return orders.join(', ')
-}
 
 function processRows(rows) {
   return rows

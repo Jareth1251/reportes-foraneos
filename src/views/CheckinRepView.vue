@@ -36,25 +36,28 @@ const {
   shiftDay,
 } = useCheckinReports(site)
 
+// 'cajeras' no depende de este fetch compartido -- ver changeTab().
 function onDateStartChange(value) {
   dateStart.value = value
-  changeDateRange()
+  if (activeTab.value !== 'cajeras') changeDateRange()
 }
 
 function onDateEndChange(value) {
   dateEnd.value = value
-  changeDateRange()
+  if (activeTab.value !== 'cajeras') changeDateRange()
 }
 
 function onSetRange({ start, end }) {
   dateStart.value = start
   dateEnd.value = end
-  fetchDetail()
+  if (activeTab.value !== 'cajeras') fetchDetail()
 }
 
 function changeTab(key) {
   activeTab.value = key
-  if (key !== 'general') fetchDetail()
+  // 'cajeras' ya no depende de este fetch compartido -- tiene su propio fetch
+  // liviano (useCajerasReport). Ver investigación 2026-08-07.
+  if (key !== 'general' && key !== 'cajeras') fetchDetail()
 }
 
 onMounted(() => {
@@ -159,14 +162,11 @@ const TABS = computed(() => {
 
       <CajerasReportTable
         v-else-if="activeTab === 'cajeras' && canSeeCajerasReport"
-        :rows="detail"
         :date-start="dateStart"
         :date-end="dateEnd"
-        :loading="loading"
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
-        @refresh="fetchDetail"
         @set-range="onSetRange"
       />
 

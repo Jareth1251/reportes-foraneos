@@ -7,23 +7,22 @@ import { useCajerasReport } from '@/composables/useCajerasReport'
 import { styleHeaderRow, downloadWorkbook } from '@/utils/excelExport'
 
 const props = defineProps({
-  rows: { type: Array, required: true },
   dateStart: { type: String, required: true },
   dateEnd: { type: String, required: true },
-  loading: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh', 'setRange'])
+const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'setRange'])
 
 const {
+  checkinsLoading,
   foraneosLoading,
-  fetchForaneosForCajeras,
+  fetchAllCajeras,
   cajerasReport,
   cajerasDetail,
   cajeraTimingReport,
   pageOrdersInvoicedCount,
   fetchPageOrdersInvoicedCount,
-} = useCajerasReport(toRef(props, 'rows'), toRef(props, 'dateStart'), toRef(props, 'dateEnd'))
+} = useCajerasReport(toRef(props, 'dateStart'), toRef(props, 'dateEnd'))
 
 const selectedCajera = ref(null)
 const selectedDetail = computed(() => selectedCajera.value ? (cajerasDetail.value[selectedCajera.value] || { checkinRows: [], foraneoRows: [] }) : null)
@@ -36,7 +35,7 @@ function closeCajeraDetail() {
 }
 
 function fetchAll() {
-  fetchForaneosForCajeras()
+  fetchAllCajeras()
   fetchPageOrdersInvoicedCount()
 }
 
@@ -44,7 +43,6 @@ onMounted(fetchAll)
 watch(() => [props.dateStart, props.dateEnd], fetchAll)
 
 function handleRefresh() {
-  emit('refresh')
   fetchAll()
 }
 
@@ -125,7 +123,7 @@ async function exportCajeras() {
       class="mb-4"
       :date-start="dateStart"
       :date-end="dateEnd"
-      :loading="loading || foraneosLoading"
+      :loading="checkinsLoading || foraneosLoading"
       @update:date-start="emit('update:dateStart', $event)"
       @update:date-end="emit('update:dateEnd', $event)"
       @shift="emit('shift', $event)"
@@ -140,7 +138,7 @@ async function exportCajeras() {
       </template>
     </DateRangeToolbar>
 
-    <div v-if="loading || foraneosLoading" class="flex justify-center py-16">
+    <div v-if="checkinsLoading || foraneosLoading" class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
 

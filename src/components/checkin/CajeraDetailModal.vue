@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { collapseConsolidatedPedidos } from '@/utils/pedidos'
+import { checkinInvoicedAt } from '@/utils/checkins'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -16,10 +17,6 @@ function fmtDateTime(dt) {
   const d = new Date(dt)
   if (isNaN(d)) return '—'
   return d.toLocaleString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-function checkinInvoicedAt(r) {
-  return r.order_received_at || r.agendado_at || null
 }
 
 // Un turno puede traer varios pedidos (erp_order_grouped separado por comas);
