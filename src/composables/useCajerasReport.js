@@ -68,7 +68,11 @@ export function useCajerasReport(dateStart, dateEnd) {
   async function fetchCheckinsForCajeras() {
     checkinsLoading.value = true
     try {
-      const params = new URLSearchParams({ date: dateStart.value, end_date: dateEnd.value })
+      // site=3000 -- mismo site que /node-api/users?site=3000 (loadSiteCajeras). Sin este
+      // filtro el backend trae checkins de TODOS los sites mezclados (CheckinRepView nunca
+      // filtra por site), inflando los totales con gente de otros sites. Ver investigación
+      // 2026-08-08.
+      const params = new URLSearchParams({ date: dateStart.value, end_date: dateEnd.value, site: '3000' })
       const res = await fetch(`/node-api/checkin/cajeras?${params}`)
       const json = await res.json()
       const rows = Array.isArray(json?.result?.[0]?.data) ? json.result[0].data : []
