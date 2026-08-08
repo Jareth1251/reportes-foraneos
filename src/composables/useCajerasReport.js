@@ -22,16 +22,22 @@ export function useCajerasReport(dateStart, dateEnd) {
   const siteCajeraNames = ref(new Set())
   const siteCajeraCanonical = ref(new Map())
   const siteCajeraNormalized = ref(new Map())
+  const otherSiteNormalized = ref(new Set())
   const pageOrdersInvoicedCount = ref(null)
 
   async function loadSiteCajeras() {
     try {
-      const res = await fetch('/node-api/users?site=3000')
-      const rows = await res.json()
+      const [resSite, resAll] = await Promise.all([
+        fetch('/node-api/users?site=3000'),
+        fetch('/node-api/users'),
+      ])
+      const rowsSite = await resSite.json()
+      const rowsAll = await resAll.json()
+
       const names = new Set()
       const canonical = new Map()
       const normalized = new Map()
-      for (const u of (rows || [])) {
+      for (const u of (rowsSite || [])) {
         if (u.name) {
           const trimmed = String(u.name).trim()
           const key = trimmed.toUpperCase()
@@ -43,6 +49,19 @@ export function useCajerasReport(dateStart, dateEnd) {
       siteCajeraNames.value = names
       siteCajeraCanonical.value = canonical
       siteCajeraNormalized.value = normalized
+
+      // remote_orders (foraneos) no tiene columna site, asi que no se puede filtrar
+      // por SQL como en checkins -- en vez de eso, cualquier nombre que matchee un
+      // usuario CONOCIDO de OTRO site se excluye del reporte directamente (no es
+      // ambiguo, es gente confirmada de otro site). Si no matchea en ningun site,
+      // sigue cayendo en "Sin identificar" mas abajo. Ver investigación 2026-08-08.
+      const otherSites = new Set()
+      for (const u of (rowsAll || [])) {
+        if (u.name && String(u.site ?? '') !== '3000') {
+          otherSites.add(normalizeForMatch(u.name))
+        }
+      }
+      otherSiteNormalized.value = otherSites
     } catch (err) {
       console.error('[loadSiteCajeras]', err)
     }
@@ -51,15 +70,19 @@ export function useCajerasReport(dateStart, dateEnd) {
   // Si el nombre no calza con ningun usuario del site, antes se descartaba en
   // silencio (el pedido desaparecia del reporte). Ahora se agrupa bajo "Sin
   // identificar (nombre)" para que la discrepancia sea visible en vez de
-  // perderse. Ver investigación 2026-08-07.
+  // perderse -- salvo que sea un nombre confirmado de otro site, que se excluye
+  // directamente. Ver investigación 2026-08-07 y 2026-08-08.
   function canonicalName(raw) {
     const trimmed = String(raw || '').trim()
     if (!trimmed) return null
     if (siteCajeraNames.value.size === 0) return trimmed
     const key = trimmed.toUpperCase()
     if (siteCajeraCanonical.value.has(key)) return siteCajeraCanonical.value.get(key)
-    const normalized = siteCajeraNormalized.value.get(normalizeForMatch(trimmed))
-    return normalized || `${SIN_IDENTIFICAR} (${trimmed})`
+    const normKey = normalizeForMatch(trimmed)
+    const normalized = siteCajeraNormalized.value.get(normKey)
+    if (normalized) return normalized
+    if (otherSiteNormalized.value.has(normKey)) return null
+    return `${SIN_IDENTIFICAR} (${trimmed})`
   }
 
   // Endpoint dedicado y liviano (solo los campos que este reporte usa) que ya
@@ -183,8 +206,15 @@ export function useCajerasReport(dateStart, dateEnd) {
         pedidos.forEach((p) => foraneoPedidos.add(p))
       }
 
+      // El mismo folio puede aparecer en checkins Y en foraneos (el pedido toco
+      // ambos flujos) -- sumarlos tal cual lo contaba dos veces. "Foraneos" aqui
+      // muestra solo los que NO ya se contaron como checkin, para que
+      // checkins + foraneos == total (union real de pedidos facturados ese dia).
+      // Ver investigación 2026-08-08.
+      const foraneosSoloNuevos = [...foraneoPedidos].filter((p) => !checkinPedidos.has(p))
+
       const checkins = checkinPedidos.size
-      const foraneos = foraneoPedidos.size
+      const foraneos = foraneosSoloNuevos.length
       return { cajera, checkins, foraneos, total: checkins + foraneos }
     }).sort((a, b) => b.total - a.total)
   })
