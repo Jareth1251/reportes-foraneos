@@ -113,6 +113,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/cajeras-sucursal',
+      name: 'cajeras-sucursal',
+      component: () => import('@/views/CajerasSucursalView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },
