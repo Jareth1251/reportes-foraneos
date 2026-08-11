@@ -66,7 +66,7 @@ function formatDateDMY(d) {
 }
 
 function transformRow(order) {
-  const paidDate = parsePaidAt(order.paid_at)
+  const paidDate = parsePaidAt(order.paid_at) || parsePaidAt(order.added_manually_at)
   const isDelivery = String(order.shipping_type || '').toUpperCase() === 'DELIVERY'
   const finalTs = isDelivery ? order.entregado_at : order.facturado_at
 

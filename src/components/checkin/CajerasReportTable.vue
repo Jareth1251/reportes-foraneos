@@ -75,6 +75,7 @@ async function exportCajeras() {
   wsResumen.columns = [
     { header: 'Cajera', key: 'cajera', width: 28 },
     { header: 'Checkins Facturados', key: 'checkins', width: 22 },
+    { header: 'Pedidos de Página', key: 'pagina', width: 20 },
     { header: 'Foráneos Facturados', key: 'foraneos', width: 22 },
     { header: 'Total', key: 'total', width: 12 },
   ]
@@ -83,6 +84,7 @@ async function exportCajeras() {
     wsResumen.addRow({
       cajera: 'PÁGINA WEB',
       checkins: '—',
+      pagina: '—',
       foraneos: '—',
       total: pageOrdersInvoicedCount.value,
     })
@@ -90,6 +92,7 @@ async function exportCajeras() {
   const totalRow = wsResumen.addRow({
     cajera: 'TOTAL',
     checkins: cajerasReport.value.reduce((s, r) => s + r.checkins, 0),
+    pagina: cajerasReport.value.reduce((s, r) => s + r.pagina, 0),
     foraneos: cajerasReport.value.reduce((s, r) => s + r.foraneos, 0),
     total: cajerasReport.value.reduce((s, r) => s + r.total, 0) + (pageOrdersInvoicedCount.value || 0),
   })
@@ -149,13 +152,14 @@ async function exportCajeras() {
           <tr class="text-sm bg-base-200">
             <th>Cajera</th>
             <th class="text-center">Checkins Facturados</th>
+            <th class="text-center">Pedidos de Página</th>
             <th class="text-center">Foráneos Facturados</th>
             <th class="text-center font-bold">Total</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="cajerasReport.length === 0 && pageOrdersInvoicedCount == null">
-            <td colspan="4" class="text-center text-base-content/40">Sin registros.</td>
+            <td colspan="5" class="text-center text-base-content/40">Sin registros.</td>
           </tr>
           <tr
             v-for="row in cajerasReport"
@@ -165,6 +169,7 @@ async function exportCajeras() {
           >
             <td class="font-medium">{{ row.cajera }}</td>
             <td class="text-center">{{ row.checkins }}</td>
+            <td class="text-center">{{ row.pagina }}</td>
             <td class="text-center">{{ row.foraneos }}</td>
             <td class="text-center font-bold">{{ row.total }}</td>
           </tr>
@@ -172,11 +177,13 @@ async function exportCajeras() {
             <td class="font-medium">PÁGINA WEB</td>
             <td class="text-center">—</td>
             <td class="text-center">—</td>
+            <td class="text-center">—</td>
             <td class="text-center font-bold">{{ pageOrdersInvoicedCount }}</td>
           </tr>
           <tr v-if="cajerasReport.length > 0 || pageOrdersInvoicedCount != null" class="font-bold bg-base-200 text-sm">
             <td>TOTAL</td>
             <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.checkins, 0) }}</td>
+            <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.pagina, 0) }}</td>
             <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.foraneos, 0) }}</td>
             <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.total, 0) + (pageOrdersInvoicedCount || 0) }}</td>
           </tr>

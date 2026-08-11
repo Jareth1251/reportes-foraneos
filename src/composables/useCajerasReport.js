@@ -194,11 +194,18 @@ export function useCajerasReport(dateStart, dateEnd) {
     return Object.keys(map).map(cajera => {
       const { checkinRows, foraneoRows } = map[cajera]
 
+      // checkins.is_web_order marca, desde que se registra el turno, si ese checkin
+      // corresponde a un Pedido de Página -- antes se sumaba junto con los checkins
+      // normales sin distinción; ahora se separa en su propio set para que quede claro
+      // de dónde viene cada pedido.
       const checkinPedidos = new Set()
+      const paginaPedidos = new Set()
       for (const r of checkinRows) {
         const grouped = String(r.erp_order_grouped || r.erp_order_id || '').split(',').map(s => s.trim()).filter(Boolean)
-        grouped.forEach((p) => checkinPedidos.add(p))
+        const target = r.is_web_order ? paginaPedidos : checkinPedidos
+        grouped.forEach((p) => target.add(p))
       }
+      const checkinYPaginaPedidos = new Set([...checkinPedidos, ...paginaPedidos])
 
       const foraneoPedidos = new Set()
       for (const o of foraneoRows) {
@@ -209,13 +216,14 @@ export function useCajerasReport(dateStart, dateEnd) {
       // El mismo folio puede aparecer en checkins Y en foraneos (el pedido toco
       // ambos flujos) -- sumarlos tal cual lo contaba dos veces. "Foraneos" aqui
       // muestra solo los que NO ya se contaron como checkin, para que
-      // checkins + foraneos == total (union real de pedidos facturados ese dia).
+      // checkins + pagina + foraneos == total (union real de pedidos facturados ese dia).
       // Ver investigación 2026-08-08.
-      const foraneosSoloNuevos = [...foraneoPedidos].filter((p) => !checkinPedidos.has(p))
+      const foraneosSoloNuevos = [...foraneoPedidos].filter((p) => !checkinYPaginaPedidos.has(p))
 
       const checkins = checkinPedidos.size
+      const pagina = paginaPedidos.size
       const foraneos = foraneosSoloNuevos.length
-      return { cajera, checkins, foraneos, total: checkins + foraneos }
+      return { cajera, checkins, pagina, foraneos, total: checkins + pagina + foraneos }
     }).sort((a, b) => b.total - a.total)
   })
 
