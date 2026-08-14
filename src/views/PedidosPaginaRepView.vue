@@ -94,21 +94,13 @@ function transformRow(order) {
 async function fetchOrders() {
   loading.value = true
   try {
-    const allRows = []
-    let page = 1
-    const perPage = 100
-
-    while (true) {
-      const { data } = await api.get('/admin/orders/paid', {
-        params: { date_from: dateStart.value, date_to: dateEnd.value, per_page: perPage, page, strict_date: 1 },
-      })
-      const pageRows = data?.data || []
-      allRows.push(...pageRows)
-      if (pageRows.length < perPage) break
-      page += 1
-    }
-
-    rows.value = allRows.map(transformRow)
+    // El backend de /admin/orders/paid no pagina: siempre regresa todos los
+    // pedidos que matchean el rango de fechas en una sola respuesta (ver
+    // comentario en OrderController::index). No hay que iterar páginas.
+    const { data } = await api.get('/admin/orders/paid', {
+      params: { date_from: dateStart.value, date_to: dateEnd.value, strict_date: 1 },
+    })
+    rows.value = (data?.data || []).map(transformRow)
   } catch (err) {
     console.error('Error al cargar el reporte de Pedidos de página:', err)
   } finally {
