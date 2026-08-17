@@ -122,6 +122,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/inventario-conteo',
+      name: 'inventario-conteo',
+      component: () => import('@/views/InventoryLookupView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: () => {
+        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+      },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },

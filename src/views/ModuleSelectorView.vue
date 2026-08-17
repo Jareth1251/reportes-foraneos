@@ -17,6 +17,7 @@ const MODULES = computed(() => {
   const pedidosPaginaRep = { key: 'pedidos-pagina-reporte', icon: '🧾', label: 'Reporte Pedidos de Página', desc: 'Trazabilidad completa: tiempos por etapa, responsables y comprobante de pago.', color: '#7C3AED', bg: '#EDE9FE', border: '#C4B5FD' }
   const indicadoresRep = { key: 'indicadores-reporte', icon: '📈', label: 'Indicadores', desc: 'Ventas por vendedor: clientes, presupuesto, potencial y desglose por línea de producto.', color: '#0F766E', bg: '#CCFBF1', border: '#5EEAD4' }
   const cajerasSucursal = { key: 'cajeras-sucursal', icon: '🧑‍💼', label: 'Cajeras y Sucursal', desc: 'Asignar cajeras a sucursales y paqueterías, y administrar cuáles aparecen en el selector.', color: '#9D174D', bg: '#FCE7F3', border: '#F9A8D4' }
+  const inventoryLookup = { key: 'inventario-conteo', icon: '📦', label: 'Inventario (Conteo vs QAD)', desc: 'Consultar conteos por marca contra el stock de QAD, validar sesiones y enviar conteos cíclicos.', color: '#1E3A8A', bg: '#DBEAFE', border: '#93C5FD' }
 
   if (deptId.value === '004') {
     return [
@@ -40,7 +41,7 @@ const MODULES = computed(() => {
     checkinRep,
     pedidosPaginaRep,
     indicadoresRep,
-    ...(esAdminCajeras ? [cajerasSucursal] : []),
+    ...(esAdminCajeras ? [cajerasSucursal, inventoryLookup] : []),
   ]
 })
 
