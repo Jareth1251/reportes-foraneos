@@ -20,20 +20,17 @@ const {
   dateEndSelectDraft,
   selectedWeek,
   selectedMonth,
-  selectedTerritory,
   salesFilterType,
   dataSalesByCustomerType,
   userGoal,
   userProgress,
   weekOptions,
   monthOptions,
-  territoryOptions,
   potentialFactor,
   loadCurrentMonth,
   handleWeekChangeSales,
   handleMonthChange,
   handleSearchDateRange,
-  handleTerritoryChange,
   handleDateInputChange,
 } = useIndicadoresReport(user)
 
@@ -82,17 +79,14 @@ onMounted(() => {
       <IndicadoresToolbar
         :selected-week="selectedWeek"
         :selected-month="selectedMonth"
-        :selected-territory="selectedTerritory"
         :date-select-draft="dateSelectDraft"
         :date-end-select-draft="dateEndSelectDraft"
         :sales-filter-type="salesFilterType"
         :week-options="weekOptions"
         :month-options="monthOptions"
-        :territory-options="territoryOptions"
         :loading="loading"
         @week-change="handleWeekChangeSales"
         @month-change="handleMonthChange"
-        @territory-change="handleTerritoryChange"
         @date-start-change="onDateStartChange"
         @date-end-change="onDateEndChange"
         @search="handleSearchDateRange"

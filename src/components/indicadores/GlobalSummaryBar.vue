@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { filterSellersForUser, getUserDeptId } from '@/utils/indicadoresHelpers'
+import { filterSellersForUser } from '@/utils/indicadoresHelpers'
 
 const props = defineProps({
   user: { type: Object, default: null },
@@ -13,10 +13,7 @@ const props = defineProps({
   dateEndSelect: { type: Date, default: null },
 })
 
-const canalLabel = computed(() => {
-  const dep = getUserDeptId(props.user)
-  return ['001', '002', ''].includes(dep) ? 'ANTONIO GOMEZ' : (props.user?.name || '')
-})
+const canalLabel = computed(() => props.user?.name || '')
 
 const totals = computed(() => {
   const visibleSellers = filterSellersForUser(props.dataSalesByCustomerType, props.user)
