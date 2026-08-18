@@ -17,6 +17,12 @@ import GuiaModal            from '@/components/almacen/GuiaModal.vue'
 const auth  = useAuthStore()
 const store = useForaneosStore()
 
+// Gerencia (001/002) entra a este módulo solo para visibilidad, no para operar el almacén.
+const isViewOnly = computed(() => {
+  const deptId = String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim()
+  return ['001', '002'].includes(deptId)
+})
+
 const searchText    = ref('')
 const activeStatus  = ref('facturado')
 const activeCarrier = ref(null)
@@ -415,6 +421,7 @@ async function handlePrint(order) {
           :elapsed="timeSince(getStatusStartTime(order))"
           :action-loading="store.actionLoading === order.id"
           :guia-label="guiaLabel(order)"
+          :read-only="isViewOnly"
           @assign-surtidor="openSurtidor"
           @mark-surtido="confirmMarkSurtido"
           @assign-despachador="openDespachador"

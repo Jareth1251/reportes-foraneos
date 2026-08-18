@@ -9,6 +9,8 @@ defineProps({
   elapsed:       { type: String,  default: '—' },
   actionLoading: { type: Boolean, default: false },
   guiaLabel:     { type: String,  default: 'Guía'   },
+  // Gerencia (001/002) solo mira este tablero, no debe poder mover pedidos de etapa.
+  readOnly:      { type: Boolean, default: false },
 })
 
 defineEmits([
@@ -80,14 +82,14 @@ function erpGroups(order) {
     <!-- Botones -->
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
 
-      <!-- Acción primaria según bucket -->
-      <button v-if="bucket === 'facturado'"
+      <!-- Acción primaria según bucket (oculta en modo solo-vista) -->
+      <button v-if="!readOnly && bucket === 'facturado'"
               @click="$emit('assign-surtidor', order)"
               style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;background-color:#00796B;color:#fff;width:100%;">
         👷 Confirmar Surtidor
       </button>
 
-      <button v-if="bucket === 'surtiendo'"
+      <button v-if="!readOnly && bucket === 'surtiendo'"
               :disabled="actionLoading"
               @click="$emit('mark-surtido', order)"
               style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;background-color:#8E24AA;color:#fff;">
@@ -95,19 +97,19 @@ function erpGroups(order) {
         👷 Marcar SURTIDO
       </button>
 
-      <button v-if="bucket === 'surtido-despachador'"
+      <button v-if="!readOnly && bucket === 'surtido-despachador'"
               @click="$emit('assign-despachador', order)"
               style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;background-color:#8E24AA;color:#fff;">
         🚚 Confirmar Despachador
       </button>
 
-      <button v-if="bucket === 'surtido'"
+      <button v-if="!readOnly && bucket === 'surtido'"
               @click="$emit('assign-empacador', order)"
               style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;background-color:#8E24AA;color:#fff;">
         📦 Empacar
       </button>
 
-      <button v-if="bucket === 'empacando'"
+      <button v-if="!readOnly && bucket === 'empacando'"
               :disabled="actionLoading"
               @click="$emit('enviar', order)"
               style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;background-color:#00796B;color:#fff;">
@@ -115,7 +117,7 @@ function erpGroups(order) {
         🚚 Enviar
       </button>
 
-      <button v-if="bucket === 'enviado'"
+      <button v-if="!readOnly && bucket === 'enviado'"
               :disabled="actionLoading"
               @click="$emit('deliver', order)"
               style="padding:6px 12px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;background-color:#388e3c;color:#fff;">
@@ -136,7 +138,7 @@ function erpGroups(order) {
       </button>
 
       <!-- Regresar a asesor -->
-      <button @click="$emit('return', order)"
+      <button v-if="!readOnly" @click="$emit('return', order)"
               style="padding:6px 12px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;background-color:#ff9800;color:#fff;">
         ↩️ Regresar a asesor
       </button>

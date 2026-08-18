@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { getWarehouseManagerScope } from '@/utils/warehouseManagerScope'
+import { isModuleAllowedForDept } from '@/utils/departmentModules'
 
 const DEPT_ROUTES = {
   '004': 'selector',
@@ -18,19 +20,13 @@ function defaultRouteForUser(user) {
   return DEPT_ROUTES[deptId] ?? 'selector'
 }
 
-function moduleRouteForDept(deptId) {
-  if (deptId === '004') return 'cajas'
-  if (deptId === '007') return 'almacen'
-  return 'foraneos'
-}
-
 function guardModuleRoute(routeName) {
   return () => {
     if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
 
     const auth   = useAuthStore()
     const deptId = String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim()
-    if (moduleRouteForDept(deptId) !== routeName) return { name: 'selector' }
+    if (!isModuleAllowedForDept(deptId, routeName)) return { name: 'selector' }
   }
 }
 
@@ -81,53 +77,52 @@ const router = createRouter({
       name: 'foraneos-reporte',
       component: () => import('@/views/ForaneosRepView.vue'),
       meta: { requiresAuth: true },
-      beforeEnter: () => {
-        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
-      },
+      beforeEnter: guardModuleRoute('foraneos-reporte'),
     },
     {
       path: '/checkin-reporte',
       name: 'checkin-reporte',
       component: () => import('@/views/CheckinRepView.vue'),
       meta: { requiresAuth: true },
-      beforeEnter: () => {
-        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
-      },
+      beforeEnter: guardModuleRoute('checkin-reporte'),
     },
     {
       path: '/pedidos-pagina-reporte',
       name: 'pedidos-pagina-reporte',
       component: () => import('@/views/PedidosPaginaRepView.vue'),
       meta: { requiresAuth: true },
-      beforeEnter: () => {
-        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
-      },
+      beforeEnter: guardModuleRoute('pedidos-pagina-reporte'),
     },
     {
       path: '/indicadores-reporte',
       name: 'indicadores-reporte',
       component: () => import('@/views/IndicadoresRepView.vue'),
       meta: { requiresAuth: true },
-      beforeEnter: () => {
-        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
-      },
+      beforeEnter: guardModuleRoute('indicadores-reporte'),
     },
     {
       path: '/cajeras-sucursal',
       name: 'cajeras-sucursal',
       component: () => import('@/views/CajerasSucursalView.vue'),
       meta: { requiresAuth: true },
-      beforeEnter: () => {
-        if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
-      },
+      beforeEnter: guardModuleRoute('cajeras-sucursal'),
     },
     {
       path: '/inventario-conteo',
       name: 'inventario-conteo',
       component: () => import('@/views/InventoryLookupView.vue'),
       meta: { requiresAuth: true },
+      beforeEnter: guardModuleRoute('inventario-conteo'),
+    },
+    {
+      path: '/agentes-almacen',
+      name: 'agentes-almacen',
+      component: () => import('@/views/WarehouseAgentsView.vue'),
+      meta: { requiresAuth: true },
       beforeEnter: () => {
         if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
+        const auth = useAuthStore()
+        if (!getWarehouseManagerScope(auth.user)) return { name: 'selector' }
       },
     },
     {
