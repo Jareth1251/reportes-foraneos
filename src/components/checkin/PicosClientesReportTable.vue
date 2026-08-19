@@ -47,10 +47,26 @@ const bucketEdges = computed(() => {
   return edges
 })
 
+// Solo cuentan los que llegaron a que un agente de piso les creara el pedido
+// ahí mismo -- no los que llegan con pedido de página web o ya agendado.
+function isCreatedByFloorAgent(r) {
+  const creator = String(r.created_by_name || '').trim().toUpperCase()
+  return creator !== '' && creator !== 'PAGINA WEB'
+}
+
+// Los picos son tráfico de piso real: pausados y cancelados no cuentan
+// (nunca llegaron a estar en fila esperando pedido/creando pedido de forma
+// normal). El resto sí cuenta, aunque después haya avanzado a pagado/entregado.
+const peakRows = computed(() =>
+  filteredRows.value.filter((r) =>
+    !['canceled', 'cancelled', 'paused'].includes(String(r.status || '').toLowerCase()) && isCreatedByFloorAgent(r),
+  ),
+)
+
 const peakSeries = computed(() => {
   const edges = bucketEdges.value
   const buckets = edges.slice(0, -1).map((hour, i) => ({ hour, end: edges[i + 1], count: 0 }))
-  for (const r of filteredRows.value) {
+  for (const r of peakRows.value) {
     const d = new Date(r.arrive_at)
     const hourFloat = d.getHours() + d.getMinutes() / 60
     const bucket = buckets.find((b) => hourFloat >= b.hour && hourFloat < b.end)
@@ -78,6 +94,8 @@ const peak = computed(() => {
 const dailyAgentStats = computed(() => {
   const byDate = new Map()
   for (const r of filteredRows.value) {
+    if (['canceled', 'cancelled'].includes(String(r.status || '').toLowerCase())) continue
+    if (!isCreatedByFloorAgent(r)) continue
     const agent = r.created_by_name
     const date = String(r.arrive_at || '').slice(0, 10)
     if (!agent || !date) continue
@@ -105,8 +123,39 @@ const dailyAgentStats = computed(() => {
 })
 
 function fmtHour(h) {
-  return `${String(h).padStart(2, '0')}:00`
+  const hh = Math.floor(h)
+  const mm = Math.round((h - hh) * 60)
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
 }
+
+function bucketRangeLabel(p) {
+  return `${fmtHour(p.hour)} - ${fmtHour(p.end)}`
+}
+
+function fmtArriveTime(iso) {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// Al hacer clic en una franja se muestra el detalle de los turnos que
+// componen ese conteo, para poder auditar la cifra sin salir de la vista.
+const selectedBucket = ref(null)
+
+function selectBucket(p) {
+  selectedBucket.value = selectedBucket.value?.hour === p.hour ? null : p
+}
+
+const selectedBucketRows = computed(() => {
+  if (!selectedBucket.value) return []
+  const { hour, end } = selectedBucket.value
+  return peakRows.value
+    .filter((r) => {
+      const d = new Date(r.arrive_at)
+      const hourFloat = d.getHours() + d.getMinutes() / 60
+      return hourFloat >= hour && hourFloat < end
+    })
+    .sort((a, b) => new Date(a.arrive_at) - new Date(b.arrive_at))
+})
 </script>
 
 <template>
@@ -139,7 +188,7 @@ function fmtHour(h) {
         <div class="flex items-baseline gap-3 flex-wrap">
           <h3 class="text-base font-bold">Picos de Clientes por Hora</h3>
           <span class="text-sm text-base-content/60">
-            Pico del rango: <b class="text-base-content">{{ fmtHour(peak.hour) }}</b> con <b class="text-base-content">{{ peak.count }}</b> clientes
+            Pico del rango: <b class="text-base-content">{{ bucketRangeLabel(peak) }}</b> con <b class="text-base-content">{{ peak.count }}</b> clientes
           </span>
         </div>
 
@@ -150,14 +199,18 @@ function fmtHour(h) {
         <div class="overflow-x-auto">
           <table class="table table-sm">
             <thead>
-              <tr class="text-sm"><th>Hora</th><th>Clientes</th></tr>
+              <tr class="text-sm"><th>Franja horaria</th><th>Clientes</th></tr>
             </thead>
             <tbody>
               <tr
-                v-for="p in peakSeries" :key="p.hour" class="text-sm"
-                :class="p.hour === peak.hour ? 'bg-primary/10 font-semibold' : ''"
+                v-for="p in peakSeries" :key="p.hour" class="text-sm cursor-pointer hover:bg-base-200"
+                :class="[
+                  p.hour === peak.hour ? 'bg-primary/10 font-semibold' : '',
+                  selectedBucket?.hour === p.hour ? 'outline outline-2 outline-primary outline-offset-[-2px]' : '',
+                ]"
+                @click="selectBucket(p)"
               >
-                <td>{{ fmtHour(p.hour) }}</td>
+                <td>{{ bucketRangeLabel(p) }}</td>
                 <td class="flex items-center gap-2">
                   {{ p.count }}
                   <span v-if="p.hour === peak.hour" class="badge badge-primary badge-sm">Pico</span>
@@ -165,6 +218,33 @@ function fmtHour(h) {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div v-if="selectedBucket" class="card bg-base-100 border border-base-300 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-bold text-sm">
+              Detalle {{ bucketRangeLabel(selectedBucket) }} — {{ selectedBucketRows.length }} cliente(s)
+            </h4>
+            <button class="btn btn-xs btn-ghost" @click="selectedBucket = null">✕</button>
+          </div>
+          <div class="overflow-auto max-h-80">
+            <table class="table table-xs">
+              <thead>
+                <tr class="text-xs">
+                  <th>Turno</th><th>Cliente</th><th>Pedido</th><th>Estado Final</th><th>Hora</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in selectedBucketRows" :key="r.id" class="text-xs">
+                  <td>{{ r.turn }}</td>
+                  <td class="max-w-40 truncate" :title="r.name">{{ r.name }}</td>
+                  <td>{{ r.erp_order_grouped }}</td>
+                  <td>{{ r.status_label }}</td>
+                  <td>{{ fmtArriveTime(r.arrive_at) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
