@@ -70,6 +70,7 @@ export function useCheckinReports(site) {
   const today = new Date().toISOString().slice(0, 10)
   const dateStart = ref(today)
   const dateEnd = ref(today)
+  let lastFetchedKey = null
 
   async function fetchTotals() {
     totalsLoading.value = true
@@ -99,7 +100,15 @@ export function useCheckinReports(site) {
     }
   }
 
-  async function fetchDetail() {
+  // El detalle es el mismo para todas las tabs (Detalle, Agendados, Almacén,
+  // Piso, Picos) -- cambiar de tab no debe repetir la descarga si el rango de
+  // fechas no cambió. `force` lo usa el botón "Actualizar" para forzar la
+  // recarga aunque el rango sea el mismo (ver feedback_no_polling: sin polling
+  // automático, el refresh manual sí debe funcionar siempre).
+  async function fetchDetail({ force = false } = {}) {
+    const key = `${dateStart.value}|${dateEnd.value}|${site.value ?? ''}`
+    if (!force && key === lastFetchedKey) return
+
     loading.value = true
     try {
       const params = new URLSearchParams({ date: dateStart.value, end_date: dateEnd.value })
@@ -108,6 +117,7 @@ export function useCheckinReports(site) {
       const json = await res.json()
       const rows = Array.isArray(json?.result?.[0]?.data) ? json.result[0].data : []
       detail.value = processRows(rows)
+      lastFetchedKey = key
     } catch (err) {
       console.error(err)
     } finally {

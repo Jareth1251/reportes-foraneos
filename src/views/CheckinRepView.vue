@@ -8,6 +8,7 @@ import DetalleReportTable from '@/components/checkin/DetalleReportTable.vue'
 import AgendadosReportTable from '@/components/checkin/AgendadosReportTable.vue'
 import AlmacenReportTable from '@/components/checkin/AlmacenReportTable.vue'
 import PisoReportTable from '@/components/checkin/PisoReportTable.vue'
+import PicosClientesReportTable from '@/components/checkin/PicosClientesReportTable.vue'
 import CajerasReportTable from '@/components/checkin/CajerasReportTable.vue'
 
 const router = useRouter()
@@ -50,14 +51,22 @@ function onDateEndChange(value) {
 function onSetRange({ start, end }) {
   dateStart.value = start
   dateEnd.value = end
-  if (activeTab.value !== 'cajeras') fetchDetail()
+  if (activeTab.value !== 'cajeras') fetchDetail({ force: true })
 }
 
 function changeTab(key) {
   activeTab.value = key
   // 'cajeras' ya no depende de este fetch compartido -- tiene su propio fetch
   // liviano (useCajerasReport). Ver investigación 2026-08-07.
+  // El resto de tabs comparten `detail`: fetchDetail() no repite la descarga
+  // si el rango de fechas no cambió desde la última vez (ver useCheckinReports.js).
   if (key !== 'general' && key !== 'cajeras') fetchDetail()
+}
+
+// El botón "Actualizar" de cada tab debe refrescar siempre, aunque el rango
+// de fechas sea el mismo (no hay polling automático -- ver feedback_no_polling).
+function refreshDetail() {
+  fetchDetail({ force: true })
 }
 
 onMounted(() => {
@@ -73,6 +82,7 @@ const TABS = computed(() => {
     { key: 'almacen', label: 'Reporte Almacén' },
   ]
   if (canSeePisoReport.value) tabs.push({ key: 'piso', label: 'Reporte Piso' })
+  if (canSeePisoReport.value) tabs.push({ key: 'picos', label: 'Picos de Clientes' })
   if (canSeeCajerasReport.value) tabs.push({ key: 'cajeras', label: 'Cajeras' })
   return tabs
 })
@@ -120,7 +130,7 @@ const TABS = computed(() => {
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
-        @refresh="fetchDetail"
+        @refresh="refreshDetail"
       />
 
       <AgendadosReportTable
@@ -132,7 +142,7 @@ const TABS = computed(() => {
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
-        @refresh="fetchDetail"
+        @refresh="refreshDetail"
       />
 
       <AlmacenReportTable
@@ -144,7 +154,7 @@ const TABS = computed(() => {
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
-        @refresh="fetchDetail"
+        @refresh="refreshDetail"
       />
 
       <PisoReportTable
@@ -157,7 +167,19 @@ const TABS = computed(() => {
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
-        @refresh="fetchDetail"
+        @refresh="refreshDetail"
+      />
+
+      <PicosClientesReportTable
+        v-else-if="activeTab === 'picos' && canSeePisoReport"
+        :rows="detail"
+        :date-start="dateStart"
+        :date-end="dateEnd"
+        :loading="loading"
+        @update:date-start="onDateStartChange"
+        @update:date-end="onDateEndChange"
+        @shift="shiftDay"
+        @refresh="refreshDetail"
       />
 
       <CajerasReportTable
