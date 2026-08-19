@@ -2,6 +2,14 @@ export function normalize(str) {
   return str?.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim() || ''
 }
 
+// Un turno cuenta como "creado por un agente de piso" solo si alguien en
+// tienda le creó el pedido -- no si llegó ya con pedido de página web o
+// pre-hecho/agendado (esos no tienen creador asignado).
+export function isCreatedByFloorAgent(row) {
+  const creator = String(row.created_by_name || '').trim().toUpperCase()
+  return creator !== '' && creator !== 'PAGINA WEB'
+}
+
 export function timeDiff(a, b) {
   if (!a || !b) return null
   const da = new Date(a)

@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import DateRangeToolbar from './DateRangeToolbar.vue'
 import { exportToExcel } from '@/utils/excelExport'
-import { getAverageTime, normalize } from '@/utils/reportTime'
+import { getAverageTime, isCreatedByFloorAgent, normalize } from '@/utils/reportTime'
 import { PISO_FIELDS } from './reportFields'
 import { SITIOS } from '@/utils/cajerasSucursalHelpers'
 
@@ -44,13 +44,20 @@ const pisoDetail = computed(() => {
   )
 })
 
+// Solo cuentan pedidos activos (no cancelados) creados por un agente de piso
+// en tienda -- excluye página web y los que llegan ya con pedido hecho
+// (remoto/agendado, sin creador asignado). Así cuadra con Picos de Clientes.
+const pisoActive = computed(() =>
+  pisoDetail.value.filter((i) => !['canceled', 'cancelled'].includes(String(i.status || '').toLowerCase())),
+)
+const pisoAgentCreated = computed(() => pisoActive.value.filter(isCreatedByFloorAgent))
+
 const pisoCounts = computed(() => {
   const items = pisoDetail.value
-  const web = items.filter((i) => String(i.created_by_name || '').trim().toUpperCase() === 'PAGINA WEB').length
-  const piso = items.length - web
   const canceled = items.filter((i) => ['canceled', 'cancelled'].includes(String(i.status || '').toLowerCase())).length
-  const created = items.filter((i) => i.usr_name_order_created || i.usr_name_creating_order).length
-  return { web, piso, total: items.length, canceled, created }
+  const web = pisoActive.value.filter((i) => String(i.created_by_name || '').trim().toUpperCase() === 'PAGINA WEB').length
+  const created = pisoAgentCreated.value.length
+  return { web, piso: created, total: items.length, canceled, created }
 })
 
 function exportPiso() {
@@ -88,7 +95,7 @@ function exportPiso() {
       <h4 class="font-bold mb-1">Promedios</h4>
       <ul class="list-none space-y-0.5">
         <li v-if="['VYAM', 'VRAT'].includes(spid)">⏱️ Promedio Atención Cliente: {{ getAverageTime(pisoDetail, 'diff_creating_order_at') }}</li>
-        <li>⏱️ Tiempo Creación Pedido Promedio: {{ getAverageTime(pisoDetail, 'diff_created_order') }}</li>
+        <li>⏱️ Tiempo Creación Pedido Promedio: {{ getAverageTime(pisoAgentCreated, 'diff_created_order') }}</li>
         <li>📦 Pedidos creados por este agente: {{ pisoCounts.created }}</li>
         <li>🌐 Pedidos creados por PAGINA WEB: {{ pisoCounts.web }}</li>
         <li>🏬 Pedidos creados en PISO: {{ pisoCounts.piso }}</li>

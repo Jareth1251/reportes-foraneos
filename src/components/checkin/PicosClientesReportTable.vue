@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import DateRangeToolbar from './DateRangeToolbar.vue'
 import PeakHoursChart from './PeakHoursChart.vue'
-import { toSeconds, toTime } from '@/utils/reportTime'
+import { isCreatedByFloorAgent, toSeconds, toTime } from '@/utils/reportTime'
 import { SITIOS } from '@/utils/cajerasSucursalHelpers'
 
 const props = defineProps({
@@ -47,13 +47,6 @@ const bucketEdges = computed(() => {
   return edges
 })
 
-// Solo cuentan los que llegaron a que un agente de piso les creara el pedido
-// ahí mismo -- no los que llegan con pedido de página web o ya agendado.
-function isCreatedByFloorAgent(r) {
-  const creator = String(r.created_by_name || '').trim().toUpperCase()
-  return creator !== '' && creator !== 'PAGINA WEB'
-}
-
 // Los picos son tráfico de piso real: pausados y cancelados no cuentan
 // (nunca llegaron a estar en fila esperando pedido/creando pedido de forma
 // normal). El resto sí cuenta, aunque después haya avanzado a pagado/entregado.
@@ -88,6 +81,8 @@ const peak = computed(() => {
   if (!peakSeries.value.length) return null
   return peakSeries.value.reduce((best, p) => (p.count > best.count ? p : best), peakSeries.value[0])
 })
+
+const totalClientes = computed(() => peakSeries.value.reduce((sum, p) => sum + p.count, 0))
 
 // Agente más eficiente por día: prioridad a más turnos creados; en empate,
 // desempata el menor promedio de tiempo de creación del pedido.
@@ -185,11 +180,17 @@ const selectedBucketRows = computed(() => {
 
     <div v-else class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_460px] gap-8 items-start">
       <div class="flex flex-col gap-3 min-w-0">
-        <div class="flex items-baseline gap-3 flex-wrap">
-          <h3 class="text-base font-bold">Picos de Clientes por Hora</h3>
-          <span class="text-sm text-base-content/60">
-            Pico del rango: <b class="text-base-content">{{ bucketRangeLabel(peak) }}</b> con <b class="text-base-content">{{ peak.count }}</b> clientes
-          </span>
+        <h3 class="text-lg font-bold">Picos de Clientes por Hora</h3>
+
+        <div class="flex gap-4 flex-wrap">
+          <div class="card bg-base-100 border border-base-300 p-5 flex-1 min-w-[200px]">
+            <div class="text-sm text-base-content/60">Total del rango</div>
+            <div class="text-3xl font-bold">{{ totalClientes }} <span class="text-lg font-normal text-base-content/60">clientes</span></div>
+          </div>
+          <div class="card bg-base-100 border border-base-300 p-5 flex-1 min-w-[200px]">
+            <div class="text-sm text-base-content/60">Pico ({{ bucketRangeLabel(peak) }})</div>
+            <div class="text-3xl font-bold">{{ peak.count }} <span class="text-lg font-normal text-base-content/60">clientes</span></div>
+          </div>
         </div>
 
         <div class="card bg-base-100 border border-base-300 p-4">
