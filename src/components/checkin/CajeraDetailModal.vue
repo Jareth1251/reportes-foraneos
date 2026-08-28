@@ -112,18 +112,20 @@ const expandedForaneos = computed(() => {
               <th>Pedido</th>
               <th>Cliente</th>
               <th>Paquetería</th>
+              <th>Atendido</th>
               <th>Facturado</th>
               <th>Estado</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="expandedForaneos.length === 0">
-              <td colspan="5" class="text-center text-base-content/40">Sin foráneos.</td>
+              <td colspan="6" class="text-center text-base-content/40">Sin foráneos.</td>
             </tr>
             <tr v-for="(o, i) in expandedForaneos" :key="`${o.id}-${i}`">
               <td>{{ o.pedido }}</td>
               <td>{{ o.customer_name || '—' }}</td>
               <td>{{ o.carrier || '—' }}</td>
+              <td>{{ fmtDateTime(o.atendido_at) }}</td>
               <td>{{ fmtDateTime(o.facturado_at) }}</td>
               <td>{{ o.status }}</td>
             </tr>

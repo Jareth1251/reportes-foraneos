@@ -240,6 +240,12 @@ export function useCajerasReport(dateStart, dateEnd) {
       checkinGroups[nombre].push(r)
     }
 
+    // Tres tramos por foráneo, analogo a Espera / Cobro / Total de checkin:
+    //   espera   = created_at  -> atendido_at  (la card esperando en el tablero de Cajas)
+    //   atencion = atendido_at -> facturado_at (la cajera atendiendo + facturando)
+    //   total    = created_at  -> facturado_at (referencia; incluye el rezago)
+    // espera/atencion solo cuentan cuando la cajera marcó "Atender" (atendido_at
+    // presente). total cuenta siempre. Ver ModalForaneos / boton "Atender".
     const foraneosGroups = {}
     for (const o of foraneosForCajeras.value) {
       const rawCajera = o.facturado_por_name
@@ -248,29 +254,41 @@ export function useCajerasReport(dateStart, dateEnd) {
       if (!o.facturado_at || !o.created_at) continue
       const facturadoAt = new Date(o.facturado_at).getTime()
       const createdAt = new Date(o.created_at).getTime()
-      const diffSec = (facturadoAt - createdAt) / 1000
-      if (diffSec < 0) continue
+      const totalSec = (facturadoAt - createdAt) / 1000
+      if (totalSec < 0) continue
       const cajera = canonicalName(rawCajera)
       if (!cajera) continue
-      if (!foraneosGroups[cajera]) foraneosGroups[cajera] = []
-      foraneosGroups[cajera].push(diffSec)
+      if (!foraneosGroups[cajera]) foraneosGroups[cajera] = { espera: [], atencion: [], total: [] }
+      foraneosGroups[cajera].total.push(totalSec)
+
+      if (o.atendido_at) {
+        const atendidoAt = new Date(o.atendido_at).getTime()
+        const esperaSec = (atendidoAt - createdAt) / 1000
+        const atencionSec = (facturadoAt - atendidoAt) / 1000
+        if (esperaSec >= 0) foraneosGroups[cajera].espera.push(esperaSec)
+        if (atencionSec >= 0) foraneosGroups[cajera].atencion.push(atencionSec)
+      }
     }
+
+    const avgOf = (arr) => arr.length
+      ? toTime(arr.reduce((a, b) => a + b, 0) / arr.length)
+      : '00:00:00'
 
     const allCajeras = new Set([...Object.keys(checkinGroups), ...Object.keys(foraneosGroups)])
     return Array.from(allCajeras).map(cajera => {
       const rows = checkinGroups[cajera] || []
-      const foraneoSecs = foraneosGroups[cajera] || []
-      const avgForaneo = foraneoSecs.length
-        ? toTime(foraneoSecs.reduce((a, b) => a + b, 0) / foraneoSecs.length)
-        : '00:00:00'
+      const f = foraneosGroups[cajera] || { espera: [], atencion: [], total: [] }
       return {
         cajera,
         checkinCount: rows.length,
         avgEspera: getAverageTime(rows, 'diff_paying_at'),
         avgCobro: getAverageTime(rows, 'diff_payment_time'),
         avgTotalCheckin: getAverageTime(rows, 'diff_payed_box'),
-        foraneoCount: foraneoSecs.length,
-        avgForaneo,
+        foraneoCount: f.total.length,
+        foraneoAtendidoCount: f.atencion.length,
+        avgEsperaForaneo: avgOf(f.espera),
+        avgAtencionForaneo: avgOf(f.atencion),
+        avgForaneo: avgOf(f.total),
       }
     }).sort((a, b) => a.cajera.localeCompare(b.cajera))
   })

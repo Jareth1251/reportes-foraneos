@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/config/axios'
 import * as XLSX from 'xlsx'
+import TelemarketingReportTable from '@/components/foraneos/TelemarketingReportTable.vue'
 
 const router = useRouter()
 if (!sessionStorage.getItem('foraneos_module_chosen')) {
@@ -148,6 +149,8 @@ function isDelivered(o = {}) {
 const deptId    = computed(() => String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim())
 const isDept007 = computed(() => deptId.value === '007')
 const isGerente = computed(() => deptId.value === '001' || deptId.value === '002')
+// La tab "Reporte Telemarketing" solo la ve Marketing (dept 008).
+const isTelemarketingReport = computed(() => deptId.value === '008')
 
 const searchText = ref('')
 
@@ -600,10 +603,10 @@ onMounted(fetchOrders)
       </div>
 
       <div class="ml-auto flex items-center gap-3">
-        <span class="text-xs text-base-content/70">
+        <span v-if="activeTab !== 'telemarketing'" class="text-xs text-base-content/70">
           <b class="text-base-content">{{ displayOrders.length }}</b> {{ displayOrders.length === 1 ? 'turno' : 'turnos' }}
         </span>
-        <button class="btn btn-xs btn-primary" :class="{ 'loading': loading }" @click="fetchOrders">
+        <button v-if="activeTab !== 'telemarketing'" class="btn btn-xs btn-primary" :class="{ 'loading': loading }" @click="fetchOrders">
           <span v-if="!loading">↻ Actualizar</span>
           <span v-else>Cargando...</span>
         </button>
@@ -619,6 +622,12 @@ onMounted(fetchOrders)
         :class="activeTab === key ? 'border-green-700 text-green-800' : 'border-transparent text-base-content/50 hover:text-base-content'"
         @click="activeTab = key"
       >{{ label }}</button>
+      <button
+        v-if="isTelemarketingReport"
+        class="px-4 py-1.5 text-sm font-medium border-b-2 transition-colors"
+        :class="activeTab === 'telemarketing' ? 'border-green-700 text-green-800' : 'border-transparent text-base-content/50 hover:text-base-content'"
+        @click="activeTab = 'telemarketing'"
+      >Reporte Telemarketing</button>
     </div>
 
     <!-- Área scrollable principal -->
@@ -862,6 +871,13 @@ onMounted(fetchOrders)
           </div>
         </template>
       </div>
+
+      <!-- TAB: REPORTE TELEMARKETING (solo dept 008) -->
+      <TelemarketingReportTable
+        v-if="activeTab === 'telemarketing' && isTelemarketingReport"
+        :date-start="filterFrom"
+        :date-end="filterTo"
+      />
 
     </div><!-- fin scroll area -->
   </div><!-- fin h-screen -->

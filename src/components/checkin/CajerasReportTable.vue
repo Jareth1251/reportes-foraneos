@@ -105,13 +105,17 @@ async function exportCajeras() {
     { header: 'Espera Checkin', key: 'avgEspera', width: 16 },
     { header: 'Cobro Checkin', key: 'avgCobro', width: 16 },
     { header: 'Total Checkin', key: 'avgTotalCheckin', width: 16 },
-    { header: 'Creación → Factura (Foráneo)', key: 'avgForaneo', width: 28 },
+    { header: 'Espera Foráneo', key: 'avgEsperaForaneo', width: 18 },
+    { header: 'Atención → Factura (Foráneo)', key: 'avgAtencionForaneo', width: 28 },
+    { header: 'Total (Creación → Factura)', key: 'avgForaneo', width: 26 },
   ]
   cajeraTimingReport.value.forEach((r) => wsPromedios.addRow({
     cajera: r.cajera,
     avgEspera: r.checkinCount ? r.avgEspera : '—',
     avgCobro: r.checkinCount ? r.avgCobro : '—',
     avgTotalCheckin: r.checkinCount ? r.avgTotalCheckin : '—',
+    avgEsperaForaneo: r.foraneoAtendidoCount ? r.avgEsperaForaneo : '—',
+    avgAtencionForaneo: r.foraneoAtendidoCount ? r.avgAtencionForaneo : '—',
     avgForaneo: r.foraneoCount ? r.avgForaneo : '—',
   }))
   styleHeaderRow(wsPromedios)
@@ -198,18 +202,22 @@ async function exportCajeras() {
             <th class="text-center">Espera Checkin</th>
             <th class="text-center">Cobro Checkin</th>
             <th class="text-center">Total Checkin</th>
-            <th class="text-center">Creación → Factura (Foráneo)</th>
+            <th class="text-center">Espera Foráneo</th>
+            <th class="text-center">Atención → Factura (Foráneo)</th>
+            <th class="text-center">Total (Creación → Factura)</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="cajeraTimingReport.length === 0">
-            <td colspan="5" class="text-center text-base-content/40">Sin registros.</td>
+            <td colspan="7" class="text-center text-base-content/40">Sin registros.</td>
           </tr>
           <tr v-for="row in cajeraTimingReport" :key="row.cajera" class="text-sm">
             <td class="font-medium">{{ row.cajera }}</td>
             <td class="text-center">{{ row.checkinCount ? row.avgEspera : '—' }}</td>
             <td class="text-center">{{ row.checkinCount ? row.avgCobro : '—' }}</td>
             <td class="text-center">{{ row.checkinCount ? row.avgTotalCheckin : '—' }}</td>
+            <td class="text-center">{{ row.foraneoAtendidoCount ? row.avgEsperaForaneo : '—' }}</td>
+            <td class="text-center">{{ row.foraneoAtendidoCount ? row.avgAtencionForaneo : '—' }}</td>
             <td class="text-center">{{ row.foraneoCount ? row.avgForaneo : '—' }}</td>
           </tr>
         </tbody>
