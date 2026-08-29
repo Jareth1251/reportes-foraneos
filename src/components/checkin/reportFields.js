@@ -32,6 +32,7 @@ export const ALMACEN_FIELDS = {
 export const PISO_FIELDS = {
   turn: 'Turno', name: 'Cliente', erp_order_grouped: 'Pedido', quantity: 'Cantidad',
   status_label: 'Estado Final', usr_arrive_name: 'Registró Turno', cancel_comment: 'Razón de Cancelación',
-  usr_name_canceled: 'Lo canceló', diff_created_order: 'Tiempo de Creación del Pedido',
-  created_by_name: 'Le creó el Pedido', arrive_at: 'Fecha',
+  usr_name_canceled: 'Lo canceló', diff_creating_order_at: 'Tiempo de Espera para Atención',
+  diff_created_order: 'Tiempo de Creación del Pedido',
+  created_by_name: 'Le creó el Pedido', arrive_at: 'Fecha', time_order_created_at: 'Hora de Creación del Pedido',
 }

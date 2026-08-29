@@ -11,7 +11,6 @@ const props = defineProps({
   dateStart: { type: String, required: true },
   dateEnd: { type: String, required: true },
   loading: { type: Boolean, default: false },
-  spid: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh'])
@@ -94,7 +93,7 @@ function exportPiso() {
     <div class="text-sm mb-4">
       <h4 class="font-bold mb-1">Promedios</h4>
       <ul class="list-none space-y-0.5">
-        <li v-if="['VYAM', 'VRAT'].includes(spid)">⏱️ Promedio Atención Cliente: {{ getAverageTime(pisoDetail, 'diff_creating_order_at') }}</li>
+        <li>⏱️ Tiempo Promedio de Espera para Atención (llegada → inicio de atención en piso): {{ getAverageTime(pisoDetail, 'diff_creating_order_at') }}</li>
         <li>⏱️ Tiempo Creación Pedido Promedio: {{ getAverageTime(pisoAgentCreated, 'diff_created_order') }}</li>
         <li>📦 Pedidos creados por este agente: {{ pisoCounts.created }}</li>
         <li>🌐 Pedidos creados por PAGINA WEB: {{ pisoCounts.web }}</li>
@@ -113,17 +112,17 @@ function exportPiso() {
           <tr class="text-sm">
             <th>Turno</th><th>Cliente</th><th>Pedido</th><th>Cant.</th><th>Estado Final</th>
             <th>Registró Turno</th><th>Razón Cancelación</th><th>Lo canceló</th>
-            <th>T. Creación Pedido</th><th>Le creó el Pedido</th><th>Fecha</th>
+            <th>T. Espera Atención</th><th>T. Creación Pedido</th><th>Le creó el Pedido</th><th>Fecha y Hora</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-if="pisoDetail.length === 0"><td colspan="11" class="text-center text-base-content/40">Sin registros.</td></tr>
+          <tr v-if="pisoDetail.length === 0"><td colspan="12" class="text-center text-base-content/40">Sin registros.</td></tr>
           <tr v-for="(r, i) in pisoDetail" :key="r.id ?? i" class="text-sm">
             <td>{{ r.turn }}</td><td class="max-w-48 truncate" :title="r.name">{{ r.name }}</td>
             <td>{{ r.erp_order_grouped }}</td><td>{{ r.quantity }}</td><td>{{ r.status_label }}</td>
             <td>{{ r.usr_arrive_name }}</td><td>{{ r.cancel_comment }}</td><td>{{ r.usr_name_canceled }}</td>
-            <td>{{ r.diff_created_order }}</td><td>{{ r.created_by_name }}</td>
-            <td>{{ String(r.arrive_at || '').slice(0, 10) }}</td>
+            <td>{{ r.diff_creating_order_at }}</td><td>{{ r.diff_created_order }}</td><td>{{ r.created_by_name }}</td>
+            <td>{{ [String(r.arrive_at || '').slice(0, 10), r.time_order_created_at].filter(Boolean).join(' ') }}</td>
           </tr>
         </tbody>
       </table>

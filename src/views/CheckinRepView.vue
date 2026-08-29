@@ -163,7 +163,6 @@ const TABS = computed(() => {
         :date-start="dateStart"
         :date-end="dateEnd"
         :loading="loading"
-        :spid="spid"
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
