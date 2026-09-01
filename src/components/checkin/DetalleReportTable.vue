@@ -1,8 +1,9 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import DateRangeToolbar from './DateRangeToolbar.vue'
 import { exportToExcel } from '@/utils/excelExport'
 import { DETALLE_FIELDS } from './reportFields'
+import { SITIOS } from '@/utils/cajerasSucursalHelpers'
 
 const props = defineProps({
   rows: { type: Array, required: true },
@@ -13,10 +14,15 @@ const props = defineProps({
 
 const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh'])
 
+// El backend numera los turnos por sucursal (site 3000 y 3100 reinician en 1),
+// así que se filtra siempre por una sola sucursal a la vez -- igual que Reporte Piso.
+const siteFilter = ref(SITIOS[0].id)
+
 const realDetail = computed(() => {
   const start = props.dateStart ? new Date(props.dateStart + 'T00:00:00') : null
   const end = props.dateEnd ? new Date(props.dateEnd + 'T23:59:59') : null
   return props.rows.filter((r) => {
+    if (String(r.site ?? '') !== siteFilter.value) return false
     if (Number(r.turn) <= 0) return false
     if (!r.arrive_at) return true
     const d = new Date(r.arrive_at)
@@ -30,7 +36,7 @@ const totalOrdersCount = computed(() => realDetail.value.reduce((acc, r) => acc 
 const fieldCount = Object.keys(DETALLE_FIELDS).length
 
 function exportDetalle() {
-  exportToExcel(realDetail.value, DETALLE_FIELDS, `ReporteTurnos_${props.dateStart}_a_${props.dateEnd}.xlsx`)
+  exportToExcel(realDetail.value, DETALLE_FIELDS, `ReporteTurnos_${siteFilter.value}_${props.dateStart}_a_${props.dateEnd}.xlsx`)
 }
 </script>
 
@@ -46,6 +52,11 @@ function exportDetalle() {
       @shift="emit('shift', $event)"
       @refresh="emit('refresh')"
     >
+      <div class="flex items-center gap-1">
+        <select v-model="siteFilter" class="select select-bordered select-sm w-36">
+          <option v-for="s in SITIOS" :key="s.id" :value="s.id">{{ s.label }}</option>
+        </select>
+      </div>
       <template #actions>
         <button class="btn btn-sm btn-success" @click="exportDetalle">⬇ Exportar Excel</button>
       </template>

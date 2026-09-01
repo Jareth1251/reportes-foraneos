@@ -65,6 +65,16 @@ function formatDateDMY(d) {
   return `${day}/${month}/${d.getFullYear()}`
 }
 
+// El carrier viene como slug ("flecha-amarilla", "pickup"); se muestra legible.
+function formatCarrier(value) {
+  if (!value) return ''
+  return String(value)
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
 function transformRow(order) {
   const paidDate = parsePaidAt(order.paid_at) || parsePaidAt(order.added_manually_at)
   const isDelivery = String(order.shipping_type || '').toUpperCase() === 'DELIVERY'
@@ -72,6 +82,7 @@ function transformRow(order) {
 
   return {
     ...order,
+    carrier: formatCarrier(order.carrier),
     fecha: formatDateDMY(paidDate),
     time_paid_at: paidDate ? fmtTime(paidDate) : '',
     time_surtido_start: fmtTime(order.surtido_start),

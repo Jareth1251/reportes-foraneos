@@ -1,9 +1,10 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import DateRangeToolbar from './DateRangeToolbar.vue'
 import { exportToExcel } from '@/utils/excelExport'
 import { getAverageTime } from '@/utils/reportTime'
 import { ALMACEN_FIELDS } from './reportFields'
+import { SITIOS } from '@/utils/cajerasSucursalHelpers'
 
 const props = defineProps({
   rows: { type: Array, required: true },
@@ -15,11 +16,17 @@ const props = defineProps({
 const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh'])
 
 const ALMACEN_STATUSES = ['stocked', 'at_stock', 'at_deliver', 'delivered', 'empacando', 'enviado', 'entregado']
-const almacenDetail = computed(() => props.rows.filter((r) => ALMACEN_STATUSES.includes(r.status)))
+
+// Se filtra por sucursal a la vez, igual que Reporte Piso (site 3000 / 3100).
+const siteFilter = ref(SITIOS[0].id)
+
+const almacenDetail = computed(() =>
+  props.rows.filter((r) => ALMACEN_STATUSES.includes(r.status) && String(r.site ?? '') === siteFilter.value),
+)
 const almacenOrdersCount = computed(() => almacenDetail.value.reduce((acc, r) => acc + (r.erp_order_count || 0), 0))
 
 function exportAlmacen() {
-  exportToExcel(almacenDetail.value, ALMACEN_FIELDS, `ReporteAlmacen_${props.dateStart}_a_${props.dateEnd}.xlsx`)
+  exportToExcel(almacenDetail.value, ALMACEN_FIELDS, `ReporteAlmacen_${siteFilter.value}_${props.dateStart}_a_${props.dateEnd}.xlsx`)
 }
 </script>
 
@@ -35,6 +42,11 @@ function exportAlmacen() {
       @shift="emit('shift', $event)"
       @refresh="emit('refresh')"
     >
+      <div class="flex items-center gap-1">
+        <select v-model="siteFilter" class="select select-bordered select-sm w-36">
+          <option v-for="s in SITIOS" :key="s.id" :value="s.id">{{ s.label }}</option>
+        </select>
+      </div>
       <template #actions>
         <button class="btn btn-sm btn-success" @click="exportAlmacen">⬇ Exportar Excel</button>
       </template>

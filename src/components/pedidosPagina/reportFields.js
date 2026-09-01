@@ -5,7 +5,7 @@ export const PEDIDOS_PAGINA_FIELDS = {
   customer: 'Cliente',
   total: 'Monto',
   quantity_total: 'Piezas',
-  shipping_type: 'Tipo Envío',
+  carrier: 'Tipo Envío',
   current_status: 'Estatus Actual',
   status_final: 'Estatus Final',
   time_paid_at: 'Pagado',
