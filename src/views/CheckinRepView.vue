@@ -26,6 +26,7 @@ const activeTab = ref('general')
 
 const {
   loading,
+  montosLoading,
   totalsLoading,
   totals,
   detail,
@@ -33,6 +34,7 @@ const {
   dateEnd,
   fetchTotals,
   fetchDetail,
+  fetchMontos,
   changeDateRange,
   shiftDay,
 } = useCheckinReports(site)
@@ -127,10 +129,12 @@ const TABS = computed(() => {
         :date-start="dateStart"
         :date-end="dateEnd"
         :loading="loading"
+        :montos-loading="montosLoading"
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
         @refresh="refreshDetail"
+        @load-montos="fetchMontos"
       />
 
       <AgendadosReportTable
@@ -151,10 +155,12 @@ const TABS = computed(() => {
         :date-start="dateStart"
         :date-end="dateEnd"
         :loading="loading"
+        :montos-loading="montosLoading"
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
         @refresh="refreshDetail"
+        @load-montos="fetchMontos"
       />
 
       <PisoReportTable

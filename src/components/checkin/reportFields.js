@@ -1,6 +1,8 @@
 export const DETALLE_FIELDS = {
   turn: 'Turno', name: 'Cliente', erp_order_grouped: 'Pedido', erp_order_count: 'Conteo de pedidos',
-  quantity: 'Cantidad', status_label: 'Estado Final',
+  quantity: 'Cantidad', asesor: 'Asesor', tipo_pedidos: 'Tipo pedidos', monto: 'Monto',
+  status_label: 'Estado Final', incidencias: 'Incidencias',
+  incidencias_agentes: 'Agente con Incidencia',
   time_arrive_at: 'Llegó', usr_arrive_name: 'Registró Turno',
   time_creating_order_at: 'Lo atendió piso', time_order_created_at: 'Se creó el pedido',
   time_paying_at: 'Lo atendió cajas', time_transferencia_at: 'Se envió a Transferencia',
@@ -13,7 +15,7 @@ export const DETALLE_FIELDS = {
   diff_at_stock_at: 'Tiempo para atención por Almacén', diff_stocked_at: 'Tiempo para surtir',
   diff_at_deliver_at: 'Tiempo para Entregar', diff_delivered_at: 'Tiempo de entrega',
   diff_sale_at: 'Tiempo en Piso', diff_payed_at: 'Tiempo en Cajas', diff_warehouse_at: 'Tiempo en Almacén',
-  diff_total_at: 'Tiempo en Tienda', paused_comment: 'Motivo Pausa', diffpaused_at: 'Tiempo Pausado',
+  diff_total_at: 'Tiempo en Tienda', pause_reason_label: 'Motivo Pausa', diffpaused_at: 'Tiempo Pausado',
   usr_name_paused: 'Lo pausó', usr_name_creating_order: 'Lo atendió', usr_name_order_created: 'Le creó el pedido',
   usr_name_paying: 'Le atendió en cajas', usr_name_transferencia: 'Lo mandó a Transferencia',
   usr_name_stocked: 'Lo atendió en Almacén', usr_name_at_stock: 'Lo surtió',
@@ -23,7 +25,9 @@ export const DETALLE_FIELDS = {
 
 export const ALMACEN_FIELDS = {
   turn: 'Turno', name: 'Cliente', erp_order_grouped: 'Pedido', erp_order_count: 'Conteo de pedidos',
-  quantity: 'Cantidad', status_label: 'Estado Final', diff_total_at: 'Tiempo Total',
+  quantity: 'Cantidad', asesor: 'Asesor', tipo_pedidos: 'Tipo pedidos', monto: 'Monto',
+  status_label: 'Estado Final', incidencias: 'Incidencias',
+  incidencias_agentes: 'Agente con Incidencia', diff_total_at: 'Tiempo Total',
   diff_at_stock_at: 'Recibe / Asignar Surtidor', diff_stocked_at: 'Surtiendo / Surtido',
   diff_surtido_entregado: 'Surtido / Entregado', usr_name_stocked: 'Lo atendió en Almacén',
   usr_name_at_stock: 'Lo surtió', usr_name_delivered: 'Lo entregó', arrive_at: 'Fecha',

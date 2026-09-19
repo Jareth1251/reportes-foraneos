@@ -94,6 +94,13 @@ const router = createRouter({
       beforeEnter: guardModuleRoute('pedidos-pagina-reporte'),
     },
     {
+      path: '/reporte-maestro',
+      name: 'reporte-maestro',
+      component: () => import('@/views/ReporteMaestroView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: guardModuleRoute('reporte-maestro'),
+    },
+    {
       path: '/indicadores-reporte',
       name: 'indicadores-reporte',
       component: () => import('@/views/IndicadoresRepView.vue'),

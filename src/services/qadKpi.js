@@ -34,4 +34,18 @@ export async function salesByCategory(salespsnId = '', typeCustomer = '', catego
   return response?.data?.result?.[0]?.ttdetailCate || []
 }
 
-export default { salesByTypeCust, salesByCategory }
+// Mismo endpoint que usa qad.catalog.salesOrder.findById en point-of-sale
+// (SalesOrderService.findById -- action "read", no "readh"). "readh" regresa
+// tickets de caja "PC######" (una venta puede agrupar varios pedidos "P######"
+// en su remarks); "read" es el único que acepta el erp_order_id real y
+// regresa su total -- ver sales-order.service.js en point-of-sale.
+export async function findSalesOrderById(salesOrderId) {
+  if (!salesOrderId) return null
+  const response = await qad.get('SalesOrder/read', {
+    params: { salesOrderId, customerId: '', salesPersonId: '', fromDate: '', toDate: '' },
+  })
+  const [order] = unwrap(response)
+  return order || null
+}
+
+export default { salesByTypeCust, salesByCategory, findSalesOrderById }

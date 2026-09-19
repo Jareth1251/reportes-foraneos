@@ -1,6 +1,64 @@
 import { ref } from 'vue'
 import { fmtTime, timeDiff } from '@/utils/reportTime'
 import { buildGroupedOrderString } from '@/utils/pedidos'
+import { findSalesOrderById } from '@/services/qadKpi'
+
+// Caché de montos a nivel módulo (sobrevive entre fetchDetail y entre vistas
+// que reusen este composable, ej. Reporte Maestro) -- el total de un pedido
+// ya cerrado no cambia, así que una vez resuelto no hace falta volver a
+// pedirlo (ni a snapshots ni a QAD).
+const qadOrderCache = new Map()
+
+// remote_order_snapshots ya cachea el total de muchos pedidos (se llena al
+// vuelo en otros flujos -- checkins, foráneos -- justamente para no pegarle
+// a QAD). Es una sola consulta a nuestra propia BD, así que esto sí se puede
+// disparar automático al cargar el reporte -- no son llamadas a QAD.
+async function fetchSnapshotMontos(ids) {
+  const pending = ids.filter((id) => !qadOrderCache.has(id))
+  if (!pending.length) return
+  try {
+    const res = await fetch(`/node-api/remote-order-snapshots?ids=${pending.join(',')}`)
+    const json = await res.json()
+    const rows = Array.isArray(json?.result?.[0]?.data) ? json.result[0].data : []
+    rows.forEach((row) => {
+      const id = String(row.erp_order_id || '').trim().toUpperCase()
+      if (id) qadOrderCache.set(id, { total: row.order_total })
+    })
+  } catch (err) {
+    console.error('[useCheckinReports] error fetchSnapshotMontos', err)
+  }
+}
+
+// Fallback para lo que no tenga snapshot: trae esos pedidos contra QAD en
+// vivo, con concurrencia limitada (uno por pedido -- no hay endpoint bulk por
+// rango de fecha que regrese el id real "P######", ver nota en
+// findSalesOrderById). Solo se dispara manual, con el botón "Cargar montos".
+async function fetchOrdersByErp(ids, concurrency = 4) {
+  const pending = ids.filter((id) => !qadOrderCache.has(id))
+  let cursor = 0
+  async function worker() {
+    while (cursor < pending.length) {
+      const id = pending[cursor++]
+      try {
+        const order = await findSalesOrderById(id)
+        qadOrderCache.set(id, order || null)
+      } catch (err) {
+        console.error('[useCheckinReports] error findSalesOrderById', id, err)
+        qadOrderCache.set(id, null)
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, worker))
+}
+
+function montoForRow(r) {
+  const erpIds = r.erp_order_grouped ? r.erp_order_grouped.split(',') : [r.erp_order_id]
+  const sum = erpIds.reduce((acc, id) => {
+    const order = qadOrderCache.get(String(id || '').trim().toUpperCase())
+    return order ? acc + (Number(order.total) || 0) : acc
+  }, 0)
+  return sum > 0 ? sum.toFixed(2) : ''
+}
 
 const DIFF_MAP = {
   diff_creating_order_at: ['arrive_at', 'creating_order_at'],
@@ -26,6 +84,18 @@ const TIME_FIELDS = ['arrive_at', 'creating_order_at', 'order_created_at', 'payi
 
 const STATUS_KEYS = ['arrive', 'creating_order', 'order_created', 'paying', 'payed', 'order_received', 'at_stock', 'stocked', 'at_deliver', 'delivered', 'canceled', 'transferencia', 'paused']
 
+// Motivo real de la pausa -- viene de la columna `pause_reason` de checkins
+// (códigos cortos, ver togglePause() en modalCheckin.js). No confundir con
+// `comment`/`paused_comment`, que es el texto libre de pedidos agrupados.
+const PAUSE_REASON_LABELS = {
+  baño: 'Cliente fue al baño',
+  no_responde: 'No responde',
+  verificando: 'Está verificando pedido',
+  salio: 'Salió de la tienda',
+  agendado: 'Pedido agendado',
+  diferencia_inventario: 'Diferencia de inventario',
+}
+
 function processRows(rows) {
   return rows
     .filter((row) => !!row?.arrive_at)
@@ -44,6 +114,10 @@ function processRows(rows) {
         r.diffpaused_at = null
       }
 
+      r.pause_reason_label = r.pause_reason
+        ? (PAUSE_REASON_LABELS[r.pause_reason] || r.pause_reason)
+        : ''
+
       STATUS_KEYS.forEach((st) => {
         const userId = r[`usr_${st}`]
         const userName = r[`usr_${st}_name`]
@@ -57,12 +131,29 @@ function processRows(rows) {
       r.erp_order_grouped = grouped || r.erp_order_id || ''
       r.erp_order_count = r.erp_order_grouped ? r.erp_order_grouped.split(',').filter(Boolean).length : 0
 
+      // Quién colocó el pedido: de piso (quien creó la orden) o "Pagina WEB"
+      // si el checkin nació de un pedido de página web.
+      r.asesor = Number(r.is_web_order) === 1
+        ? 'Pagina WEB'
+        : (r.usr_name_creating_order || r.usr_name_order_created || '')
+
+      // Mismo corte que ya usa el tablero de almacén para separar "menos/más
+      // de 20 piezas" -- MAY = Mayoreo, MEN = Menudeo.
+      r.tipo_pedidos = Number(r.quantity) > 20 ? 'MAY' : 'MEN'
+
+      // Monto: viene de QAD (SalesOrder.total), no de checkins -- se resuelve
+      // aparte en fetchMontos() para no bloquear la carga del reporte con
+      // llamadas en vivo a QAD. Si ya está en caché de una carga anterior,
+      // sale de una vez; si no, queda vacío hasta que fetchMontos() la rellene.
+      r.monto = montoForRow(r)
+
       return r
     })
 }
 
 export function useCheckinReports(site) {
   const loading = ref(false)
+  const montosLoading = ref(false)
   const totalsLoading = ref(false)
   const totals = ref({})
   const detail = ref([])
@@ -71,6 +162,7 @@ export function useCheckinReports(site) {
   const dateStart = ref(today)
   const dateEnd = ref(today)
   let lastFetchedKey = null
+  let montoFetchToken = 0
 
   async function fetchTotals() {
     totalsLoading.value = true
@@ -113,15 +205,58 @@ export function useCheckinReports(site) {
     try {
       const params = new URLSearchParams({ date: dateStart.value, end_date: dateEnd.value })
       if (site.value) params.append('site', site.value)
+
       const res = await fetch(`/node-api/checkin?${params}`)
       const json = await res.json()
       const rows = Array.isArray(json?.result?.[0]?.data) ? json.result[0].data : []
+
+      // Monto automático solo desde remote_order_snapshots (nuestra BD, una
+      // sola consulta) -- lo que no tenga snapshot queda vacío hasta que el
+      // usuario le dé clic a "Cargar montos" (fetchMontos), que sí pega a QAD.
+      const idsSet = new Set()
+      rows.forEach((row) => {
+        const grouped = buildGroupedOrderString(row) || row.erp_order_id || ''
+        grouped.split(',').forEach((id) => {
+          const clean = String(id || '').trim().toUpperCase()
+          if (clean) idsSet.add(clean)
+        })
+      })
+      await fetchSnapshotMontos(Array.from(idsSet))
+
       detail.value = processRows(rows)
       lastFetchedKey = key
     } catch (err) {
       console.error(err)
     } finally {
       loading.value = false
+    }
+  }
+
+  async function fetchMontos() {
+    const token = ++montoFetchToken
+    const rowsAtStart = detail.value
+
+    const idsSet = new Set()
+    rowsAtStart.forEach((row) => {
+      const grouped = row.erp_order_grouped || row.erp_order_id || ''
+      grouped.split(',').forEach((id) => {
+        const clean = String(id || '').trim().toUpperCase()
+        if (clean) idsSet.add(clean)
+      })
+    })
+
+    const ids = Array.from(idsSet)
+    if (!ids.length) return
+
+    montosLoading.value = true
+    try {
+      await fetchOrdersByErp(ids)
+      // Si mientras tanto cambió el rango de fecha (otro fetchDetail ya
+      // arrancó), no pisar detail.value con montos de una consulta vieja.
+      if (token !== montoFetchToken) return
+      detail.value = detail.value.map((r) => ({ ...r, monto: montoForRow(r) }))
+    } finally {
+      if (token === montoFetchToken) montosLoading.value = false
     }
   }
 
@@ -140,6 +275,7 @@ export function useCheckinReports(site) {
 
   return {
     loading,
+    montosLoading,
     totalsLoading,
     totals,
     detail,
@@ -147,6 +283,7 @@ export function useCheckinReports(site) {
     dateEnd,
     fetchTotals,
     fetchDetail,
+    fetchMontos,
     changeDateRange,
     shiftDay,
   }

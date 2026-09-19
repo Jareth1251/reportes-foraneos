@@ -10,9 +10,10 @@ const props = defineProps({
   dateStart: { type: String, required: true },
   dateEnd: { type: String, required: true },
   loading: { type: Boolean, default: false },
+  montosLoading: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh'])
+const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh', 'loadMontos'])
 
 // El backend numera los turnos por sucursal (site 3000 y 3100 reinician en 1),
 // así que se filtra siempre por una sola sucursal a la vez -- igual que Reporte Piso.
@@ -58,6 +59,9 @@ function exportDetalle() {
         </select>
       </div>
       <template #actions>
+        <button class="btn btn-sm btn-warning" :class="{ loading: montosLoading }" :disabled="montosLoading" @click="emit('loadMontos')" title="El monto ya cacheado en remote_order_snapshots se carga solo; este botón completa lo que falte pegándole a QAD en vivo.">
+          💲 Completar montos faltantes (QAD)
+        </button>
         <button class="btn btn-sm btn-success" @click="exportDetalle">⬇ Exportar Excel</button>
       </template>
     </DateRangeToolbar>
@@ -67,7 +71,10 @@ function exportDetalle() {
     </div>
 
     <div v-else class="overflow-x-auto">
-      <p class="text-sm text-base-content/60 mb-2">Conteo de pedidos: {{ totalOrdersCount }} • {{ realDetail.length }} turnos</p>
+      <p class="text-sm text-base-content/60 mb-2">
+        Conteo de pedidos: {{ totalOrdersCount }} • {{ realDetail.length }} turnos
+        <span v-if="montosLoading" class="ml-2 text-warning">· cargando montos de QAD...</span>
+      </p>
       <table class="table table-sm">
         <thead>
           <tr class="text-sm">
