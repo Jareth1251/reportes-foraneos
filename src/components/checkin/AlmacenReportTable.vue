@@ -11,10 +11,9 @@ const props = defineProps({
   dateStart: { type: String, required: true },
   dateEnd: { type: String, required: true },
   loading: { type: Boolean, default: false },
-  montosLoading: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh', 'loadMontos'])
+const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh'])
 
 const ALMACEN_STATUSES = ['stocked', 'at_stock', 'at_deliver', 'delivered', 'empacando', 'enviado', 'entregado']
 
@@ -49,9 +48,6 @@ function exportAlmacen() {
         </select>
       </div>
       <template #actions>
-        <button class="btn btn-sm btn-warning" :class="{ loading: montosLoading }" :disabled="montosLoading" @click="emit('loadMontos')" title="El monto ya cacheado en remote_order_snapshots se carga solo; este botón completa lo que falte pegándole a QAD en vivo.">
-          💲 Completar montos faltantes (QAD)
-        </button>
         <button class="btn btn-sm btn-success" @click="exportAlmacen">⬇ Exportar Excel</button>
       </template>
     </DateRangeToolbar>
@@ -73,7 +69,6 @@ function exportAlmacen() {
     <div v-else class="overflow-x-auto">
       <p class="text-sm text-base-content/60 mb-2">
         Conteo de pedidos: {{ almacenOrdersCount }} • {{ almacenDetail.length }} turnos
-        <span v-if="montosLoading" class="ml-2 text-warning">· cargando montos de QAD...</span>
       </p>
       <table class="table table-sm">
         <thead>

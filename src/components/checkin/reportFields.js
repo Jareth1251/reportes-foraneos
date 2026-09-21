@@ -25,7 +25,7 @@ export const DETALLE_FIELDS = {
 
 export const ALMACEN_FIELDS = {
   turn: 'Turno', name: 'Cliente', erp_order_grouped: 'Pedido', erp_order_count: 'Conteo de pedidos',
-  quantity: 'Cantidad', asesor: 'Asesor', tipo_pedidos: 'Tipo pedidos', monto: 'Monto',
+  quantity: 'Cantidad', asesor: 'Asesor', tipo_pedidos: 'Tipo pedidos',
   status_label: 'Estado Final', incidencias: 'Incidencias',
   incidencias_agentes: 'Agente con Incidencia', diff_total_at: 'Tiempo Total',
   diff_at_stock_at: 'Recibe / Asignar Surtidor', diff_stocked_at: 'Surtiendo / Surtido',

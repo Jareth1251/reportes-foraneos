@@ -155,12 +155,10 @@ const TABS = computed(() => {
         :date-start="dateStart"
         :date-end="dateEnd"
         :loading="loading"
-        :montos-loading="montosLoading"
         @update:date-start="onDateStartChange"
         @update:date-end="onDateEndChange"
         @shift="shiftDay"
         @refresh="refreshDetail"
-        @load-montos="fetchMontos"
       />
 
       <PisoReportTable
