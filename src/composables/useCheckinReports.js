@@ -71,9 +71,6 @@ const DIFF_MAP = {
   diff_at_deliver_at: ['stocked_at', 'at_deliver_at'],
   diff_delivered_at: ['at_deliver_at', 'delivered_at'],
   diff_surtido_entregado: ['stocked_at', 'delivered_at'],
-  diff_sale_at: ['creating_order_at', 'payed_at'],
-  diff_payed_at: ['transferencia_at', 'order_received_at'],
-  diff_warehouse_at: ['order_received_at', 'delivered_at'],
   diff_total_at: ['arrive_at', 'delivered_at'],
   diff_payed_box: ['order_created_at', 'order_received_at'],
   diff_empezo_surtir: ['payed_at', 'stocked_at'],
@@ -106,6 +103,17 @@ function processRows(rows) {
       Object.entries(DIFF_MAP).forEach(([key, [s, e]]) => { r[key] = timeDiff(r[s], r[e]) })
 
       r.diff_paying_at = timeDiff(r.order_created_at || r.arrive_at, r.paying_at)
+
+      // Tramos Piso -> Cajas -> Almacén: consecutivos y sin encimarse, para que
+      // su suma dé el Tiempo en Tienda (arrive_at -> delivered_at).
+      // Piso termina al crearse el pedido; si llegó ya con pedido (web/agendado)
+      // no hay tramo de piso y Cajas arranca desde la llegada. Cajas incluye la
+      // espera, el cobro y la transferencia si la hubo.
+      const cajasStart = r.order_created_at || r.arrive_at
+      const cajasEnd = r.order_received_at || r.payed_at
+      r.diff_sale_at = timeDiff(r.arrive_at, r.order_created_at)
+      r.diff_payed_at = timeDiff(cajasStart, cajasEnd)
+      r.diff_warehouse_at = timeDiff(cajasEnd, r.delivered_at)
 
       if (r.paused_at) {
         const pEnd = r.status !== 'paused' && r.updated_at ? r.updated_at : new Date().toISOString()
