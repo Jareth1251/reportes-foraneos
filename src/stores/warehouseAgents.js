@@ -39,6 +39,13 @@ export const useWarehouseAgentsStore = defineStore('warehouseAgents', () => {
     return _write(() => api.delete(`/warehouse-agents/${encodeURIComponent(id)}?hard=1`))
   }
 
+  // Genera (o restablece) el PIN de 4 dígitos con el que el agente entra a
+  // microfront-surtido. El PIN en claro solo viene en esta respuesta — el
+  // backend guarda únicamente el hash y cierra las sesiones abiertas del agente.
+  async function generatePin(id) {
+    return _write(() => api.post(`/warehouse-agents/${encodeURIComponent(id)}/pin`))
+  }
+
   async function _write(fn) {
     loading.value = true
     error.value   = null
@@ -56,5 +63,5 @@ export const useWarehouseAgentsStore = defineStore('warehouseAgents', () => {
 
   function clearError() { error.value = null }
 
-  return { rows, loading, error, fetchAgents, createAgent, updateAgent, deleteAgent, clearError }
+  return { rows, loading, error, fetchAgents, createAgent, updateAgent, deleteAgent, generatePin, clearError }
 })

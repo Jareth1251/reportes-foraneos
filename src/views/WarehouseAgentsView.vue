@@ -169,6 +169,38 @@ async function hardDelete(row) {
   await store.deleteAgent(row.id)
   await fetchAgents()
 }
+
+// ── PIN de acceso a microfront-surtido ─────────────────────────────────────
+// Mismo criterio que el backend (WarehouseAgentAuthService::isGenericAccount):
+// las cuentas compartidas "almacenN" no llevan PIN.
+function isGenericAccount(row) {
+  return /^almacen\d*$/i.test(String(row.username || ''))
+}
+function canHavePin(row) {
+  return Number(row.isActive) && !!row.username && !isGenericAccount(row)
+}
+function formatDateTime(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? '—' : d.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+// El PIN en claro solo existe en la respuesta de generatePin: se muestra una
+// vez en este modal y al cerrarlo se descarta.
+const pinResult = ref(null)
+
+async function generatePin(row) {
+  const msg = row.hasPin
+    ? `¿Restablecer el PIN de "${row.name}"?\n\nEl PIN anterior deja de funcionar y se cierra su sesión en surtido.`
+    : `¿Generar PIN para "${row.name}"?`
+  if (!confirm(msg)) return
+  const res = await store.generatePin(row.id)
+  if (res.ok) {
+    pinResult.value = res.data
+    await fetchAgents()
+  }
+}
+function closePinResult() { pinResult.value = null }
 </script>
 
 <template>
@@ -200,7 +232,7 @@ async function hardDelete(row) {
       </div>
     </div>
 
-    <div class="p-4" style="max-width:900px;margin:0 auto;">
+    <div class="p-4" style="max-width:1200px;margin:0 auto;">
 
       <div v-if="!scope" class="alert alert-error">
         <span>No autorizado.</span>
@@ -264,17 +296,41 @@ async function hardDelete(row) {
             <thead>
               <tr>
                 <th>Nombre</th>
+                <th>Usuario</th>
                 <th>Activo</th>
+                <th>PIN surtido</th>
+                <th>Último acceso</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="r in store.rows" :key="r.id">
                 <td>{{ r.name }}</td>
+                <td style="font-family:monospace;">{{ r.username || '—' }}</td>
                 <td>{{ Number(r.isActive) ? 'Sí' : 'No' }}</td>
+                <td style="white-space:nowrap;">
+                  <span v-if="isGenericAccount(r)" style="font-size:0.75rem;color:#999;">Genérica — sin PIN</span>
+                  <span v-else-if="r.hasPin" :title="`Asignado ${formatDateTime(r.pinUpdatedAt)}`"
+                        style="font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:999px;background:#E8F5E9;color:#2E7D32;">
+                    ✓ Asignado
+                  </span>
+                  <span v-else style="font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:999px;background:#FFF3E0;color:#E65100;">
+                    Sin PIN
+                  </span>
+                </td>
+                <td style="font-size:0.8rem;white-space:nowrap;">{{ formatDateTime(r.lastLoginAt) }}</td>
                 <td>
-                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <!-- Una sola línea; el hueco del botón de PIN se reserva
+                       aunque no aplique, para que Desactivar/Eliminar queden
+                       alineados en todas las filas. -->
+                  <div style="display:flex;gap:6px;flex-wrap:nowrap;align-items:center;">
                     <button class="btn btn-xs" @click="openEdit(r)">✏️ Editar</button>
+                    <button v-if="canHavePin(r)" class="btn btn-xs btn-info text-white"
+                            style="min-width:128px;"
+                            :disabled="store.loading" @click="generatePin(r)">
+                      🔑 {{ r.hasPin ? 'Restablecer PIN' : 'Generar PIN' }}
+                    </button>
+                    <span v-else style="min-width:128px;"></span>
                     <button v-if="Number(r.isActive)" class="btn btn-xs btn-warning" @click="toggleActive(r, false)">⏸ Desactivar</button>
                     <button v-else class="btn btn-xs btn-success text-white" @click="toggleActive(r, true)">▶ Activar</button>
                     <button class="btn btn-xs btn-error text-white" @click="hardDelete(r)">🗑 Eliminar</button>
@@ -282,7 +338,7 @@ async function hardDelete(row) {
                 </td>
               </tr>
               <tr v-if="!store.rows.length">
-                <td colspan="3" style="text-align:center;padding:16px;color:#999;">
+                <td colspan="6" style="text-align:center;padding:16px;color:#999;">
                   {{ store.loading ? 'Cargando...' : 'No hay agentes para estos filtros.' }}
                 </td>
               </tr>
@@ -290,6 +346,25 @@ async function hardDelete(row) {
           </table>
         </div>
       </template>
+    </div>
+
+    <!-- PIN recién generado: se muestra una sola vez -->
+    <div v-if="pinResult"
+         style="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:16px;">
+      <div class="bg-white" style="width:100%;max-width:360px;border-radius:12px;padding:20px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.25);">
+        <div style="font-size:0.85rem;color:#666;">PIN de acceso a surtido</div>
+        <div style="font-weight:800;font-size:1.05rem;margin-top:4px;">{{ pinResult.name }}</div>
+        <div style="font-size:0.85rem;color:#666;">
+          Usuario: <span style="font-family:monospace;font-weight:700;color:#222;">{{ pinResult.username }}</span>
+        </div>
+        <div style="font-family:monospace;font-size:3rem;font-weight:900;letter-spacing:0.35em;margin:14px 0 6px;padding-left:0.35em;color:#1565C0;">
+          {{ pinResult.pin }}
+        </div>
+        <div style="font-size:0.8rem;color:#B71C1C;background:#FFEBEE;border-radius:8px;padding:8px;">
+          Entrégaselo al agente. Por seguridad <b>no se vuelve a mostrar</b>; si lo olvida, restablécelo.
+        </div>
+        <button class="btn btn-sm btn-primary mt-4 w-full" @click="closePinResult">Listo</button>
+      </div>
     </div>
   </div>
 </template>
