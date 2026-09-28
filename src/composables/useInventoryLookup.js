@@ -5,6 +5,13 @@ import { toInt, siteLabel, rowKey, fmtDate } from '@/utils/inventoryLookupHelper
 
 const PAGE_SIZE = 200
 
+// Fecha local, no UTC: después de las 18:00 en México toISOString() ya es mañana.
+function localYmd(d = new Date()) {
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
 export function useInventoryLookup(user) {
   const isValidator = computed(() => {
     const agent = String(user.value?.agent || user.value?.username || '').toLowerCase()
@@ -22,6 +29,9 @@ export function useInventoryLookup(user) {
   const rows = ref([])
   const error = ref('')
   const sessionDate = ref(null)
+  const sessionId = ref(null)
+  const sessions = ref([])
+  const sessionSeq = ref(null)
 
   const selectedKey = ref('')
   const breakdownLoading = ref(false)
@@ -41,7 +51,7 @@ export function useInventoryLookup(user) {
   const page = ref(1)
 
   const view = ref('conteo')
-  const histDate = ref(new Date().toISOString().slice(0, 10))
+  const histDate = ref(localYmd())
   const histRows = ref([])
   const histLoading = ref(false)
   const histError = ref('')
@@ -70,6 +80,8 @@ export function useInventoryLookup(user) {
     qadError.value = ''
     page.value = 1
     sessionDate.value = null
+    sessionId.value = null
+    sessions.value = []
     selected.value = new Map()
     doneValidations.value = new Set()
   }
@@ -107,7 +119,7 @@ export function useInventoryLookup(user) {
       icon: 'warning',
       title: '¿Borrar conteo?',
       html: `<b>${pid}</b> · ${r.color_label || '-'} · ${r.size_label || '-'}<br/>
-             <span style="color:#ef4444;font-size:13px">Se eliminan todos los registros de conteo de este artículo.</span>`,
+             <span style="color:#ef4444;font-size:13px">Se eliminan los registros de conteo de este artículo en la sesión ${sessionDate.value || ''}.</span>`,
       showCancelButton: true,
       confirmButtonText: 'Sí, borrar',
       cancelButtonText: 'Cancelar',
@@ -118,7 +130,7 @@ export function useInventoryLookup(user) {
     deletingRow.value = pid
     try {
       await inventoryApi.deleteCountsProduct({
-        site: site.value, product_id: pid,
+        site: site.value, session_id: r.session_id, product_id: pid,
         color_label: r.color_label || '', size_label: r.size_label || '',
       }, user.value)
       Swal.fire('Borrado', 'El conteo fue eliminado.', 'success')
@@ -154,6 +166,7 @@ export function useInventoryLookup(user) {
     try {
       await inventoryApi.postCountValidation({
         site: site.value,
+        session_id: r.session_id,
         product_id: pid,
         article: r.article || '',
         color_label: r.color_label || '',
@@ -225,15 +238,18 @@ export function useInventoryLookup(user) {
 
     try {
       const changed = formData.filter((r) => r.qty !== r.originalQty)
+      let movedSeq = null
       for (const row of changed) {
-        await inventoryApi.putLocationCount({
+        const resp = await inventoryApi.putLocationCount({
           site: site.value,
+          session_id: v.session_id,
           product_id: v.product_id,
           color_label: v.color_label || '',
           size_label: v.size_label || '',
           location: row.location,
           qty: row.qty,
         }, user.value)
+        if (resp.data?.moved) movedSeq = resp.data.session_seq
       }
 
       await inventoryApi.putCountValidationDone(v.id, user.value)
@@ -241,10 +257,12 @@ export function useInventoryLookup(user) {
       pendingRecounts.value = pendingRecounts.value.filter((x) => x.id !== v.id)
       if (expandedValId.value === v.id) expandedValId.value = null
 
-      const msg = changed.length > 0
-        ? `${changed.length} ubicación(es) actualizadas. Reconteo confirmado.`
-        : 'Reconteo confirmado (sin cambios en cantidades).'
-      Swal.fire({ icon: 'success', title: 'Listo', text: msg, timer: 2500, showConfirmButton: false })
+      const msg = movedSeq
+        ? `Reconteo confirmado. Las correcciones quedaron en el conteo ${movedSeq} del día: valídalo para enviarlas.`
+        : changed.length > 0
+          ? `${changed.length} ubicación(es) actualizadas. Reconteo confirmado.`
+          : 'Reconteo confirmado (sin cambios en cantidades).'
+      Swal.fire({ icon: 'success', title: 'Listo', text: msg, timer: movedSeq ? undefined : 2500, showConfirmButton: !!movedSeq })
     } catch (e) {
       Swal.fire('Error', e?.response?.data?.message || e?.message || 'No se pudo guardar.', 'error')
     }
@@ -252,7 +270,7 @@ export function useInventoryLookup(user) {
 
   async function loadSessionValidation(siteVal) {
     try {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = localYmd()
       const resp = await inventoryApi.getSessionToday({ site: siteVal || site.value, date: today })
       sessionInfo.value = resp.data?.session || null
     } catch {
@@ -265,7 +283,8 @@ export function useInventoryLookup(user) {
       icon: 'question',
       title: '¿Validar conteos del día?',
       html: `Al validar, los usuarios podrán enviar los conteos a QAD.<br/>
-             <span style="font-size:12px;color:#6b7280">Sucursal: ${site.value} · Fecha: ${new Date().toLocaleDateString('es-MX')}</span>`,
+             <span style="font-size:12px;color:#6b7280">Sucursal: ${site.value} · Sesión: ${sessionDate.value || localYmd()}${sessionSeq.value ? ` · conteo ${sessionSeq.value}` : ''}</span><br/>
+             <span style="font-size:12px;color:#6b7280">Lo que se capture después irá a un conteo nuevo.</span>`,
       showCancelButton: true,
       confirmButtonText: 'Sí, validar',
       cancelButtonText: 'Cancelar',
@@ -274,10 +293,15 @@ export function useInventoryLookup(user) {
     if (!confirm.isConfirmed) return
     validating.value = true
     try {
-      const today = new Date().toISOString().slice(0, 10)
-      const resp = await inventoryApi.postValidateSessionToday({ user: user.value, site: site.value, date: today })
+      const body = { site: site.value, date: localYmd() }
+      const resp = sessionId.value
+        ? await inventoryApi.postValidateSession(sessionId.value, body)
+        : await inventoryApi.postValidateSessionToday(body)
       if (resp.data?.ok) {
         sessionInfo.value = resp.data.session
+        sessions.value = sessions.value.map((s) =>
+          s.id === resp.data.session?.id ? { ...s, validated_at: resp.data.session.validated_at } : s
+        )
         Swal.fire('Sesión validada', 'Los usuarios ya pueden enviar conteos a QAD.', 'success')
       }
     } catch (e) {
@@ -362,7 +386,10 @@ export function useInventoryLookup(user) {
     }
   }
 
-  async function handleSearch() {
+  // sessionOverride: sesión elegida en el selector; sin él se conserva la actual
+  // (o el back toma la más reciente de la marca).
+  async function handleSearch(sessionOverride) {
+    const sid = typeof sessionOverride === 'string' ? sessionOverride : sessionId.value
     const b = String(brand.value || '').trim()
     if (!b) { error.value = 'Selecciona una marca.'; rows.value = []; return }
     loading.value = true
@@ -372,11 +399,13 @@ export function useInventoryLookup(user) {
     breakdown.value = null
     breakdownError.value = ''
     stockByPid.value = {}
+    committedByPid.value = {}
+    shippedByPid.value = {}
     qadError.value = ''
     page.value = 1
     sessionDate.value = null
     try {
-      const resp = await inventoryApi.getBrandSummary({ site: site.value, brand_name: b })
+      const resp = await inventoryApi.getBrandSummary({ site: site.value, brand_name: b, session_id: sid })
       const payload = resp?.data || {}
       if (!payload?.ok) {
         error.value = payload?.message || 'No se pudo consultar el resumen por marca.'
@@ -401,6 +430,9 @@ export function useInventoryLookup(user) {
 
         rows.value = fetchedRows
         sessionDate.value = payload?.session_date || null
+        sessionId.value = payload?.session_id || null
+        sessionSeq.value = payload?.session_seq || null
+        sessions.value = Array.isArray(payload?.sessions) ? payload.sessions : []
 
         if (payload?.qad_snapshot_at) {
           qadSnapshotAt.value = payload.qad_snapshot_at
@@ -455,6 +487,7 @@ export function useInventoryLookup(user) {
     try {
       const resp = await inventoryApi.getArticleBreakdown({
         site: site.value, id: r.product_id, color_label: r.color_label, size_label: r.size_label,
+        session_id: r.session_id,
       })
       const payload = resp?.data || {}
       if (!payload?.ok) breakdownError.value = payload?.message || 'No se pudo generar el desglose.'
@@ -469,7 +502,7 @@ export function useInventoryLookup(user) {
   async function sendSingleCount(r) {
     const pid = String(r.product_id || '').trim()
     const counted = toInt(r.counted_qty)
-    const hasQad = pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid)
+    const hasQad = pid && stockByPid.value[pid] != null
     const qadQty = hasQad ? toInt(stockByPid.value[pid]) : null
 
     if (!pid) throw new Error('El producto no tiene ID (product_id)')
@@ -481,6 +514,7 @@ export function useInventoryLookup(user) {
         items: [{
           productId: pid,
           siteId: site.value,
+          session_id: r.session_id,
           qty: counted,
           qad_qty: qadQty,
           article: r.article || '',
@@ -505,7 +539,7 @@ export function useInventoryLookup(user) {
   async function handleSendToErp(r) {
     const pid = String(r.product_id || '').trim()
     const counted = toInt(r.counted_qty)
-    const hasQad = pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid)
+    const hasQad = pid && stockByPid.value[pid] != null
     const qadQty = hasQad ? toInt(stockByPid.value[pid]) : null
     const diff = hasQad ? counted - qadQty : null
 
@@ -592,9 +626,9 @@ export function useInventoryLookup(user) {
     try {
       const items = selRows.map((r) => {
         const pid = String(r.product_id || '').trim()
-        const hasQ = pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid)
+        const hasQ = pid && stockByPid.value[pid] != null
         return {
-          productId: pid, siteId: site.value, qty: toInt(r.counted_qty),
+          productId: pid, siteId: site.value, session_id: r.session_id, qty: toInt(r.counted_qty),
           qad_qty: hasQ ? toInt(stockByPid.value[pid]) : null,
           article: r.article || '', brand_name: r.brand_name || '',
           color_label: r.color_label || '', size_label: r.size_label || '',
@@ -626,7 +660,7 @@ export function useInventoryLookup(user) {
   async function handleSendAll() {
     const eligibleRows = rows.value.filter((r) => {
       const pid = String(r.product_id || '').trim()
-      const hasQad = pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid)
+      const hasQad = pid && stockByPid.value[pid] != null
       return hasQad && canSendQad.value
     })
 
@@ -799,7 +833,7 @@ export function useInventoryLookup(user) {
   const totals = computed(() => {
     const totalCounted = visibleRows.value.reduce((a, r) => a + toInt(r.counted_qty), 0)
     const uniquePids = Array.from(new Set(visibleRows.value.map((r) => String(r.product_id || '').trim()).filter(Boolean)))
-    const hasAllStock = uniquePids.length > 0 && uniquePids.every((pid) => Object.prototype.hasOwnProperty.call(stockByPid.value, pid))
+    const hasAllStock = uniquePids.length > 0 && uniquePids.every((pid) => stockByPid.value[pid] != null)
     if (!hasAllStock) return { totalCounted, totalQad: null, diff: null, hasAllStock: false }
     const totalQad = visibleRows.value.reduce((a, r) => {
       const pid = String(r.product_id || '').trim()
@@ -814,11 +848,11 @@ export function useInventoryLookup(user) {
 
   const sessionValidated = computed(() => !!sessionInfo.value?.validated_at)
   const canSeeResults = computed(() => isValidator.value || sessionValidated.value)
-  const canSendQad = computed(() => isValidator.value || ((isDept001.value || isDept002.value) && sessionValidated.value))
+  const canSendQad = computed(() => sessionValidated.value && (isValidator.value || isDept001.value || isDept002.value))
 
   const eligibleCount = computed(() => rows.value.filter((r) => {
     const pid = String(r.product_id || '').trim()
-    return pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid) && canSendQad.value
+    return pid && stockByPid.value[pid] != null && canSendQad.value
   }).length)
 
   const panelOpen = computed(() => !!(selectedKey.value && (breakdown.value || breakdownLoading.value || breakdownError.value)))
@@ -830,10 +864,11 @@ export function useInventoryLookup(user) {
   }
 
   watch(site, () => { initLoad() })
+  watch(brand, () => { sessionId.value = null })
 
   return {
     isValidator, isDept001, isDept002, isAdminUser,
-    site, brands, brand, loading, rows, error, sessionDate,
+    site, brands, brand, loading, rows, error, sessionDate, sessionId, sessions, sessionSeq,
     selectedKey, breakdownLoading, breakdown, breakdownError,
     stockByPid, committedByPid, shippedByPid, qadError,
     sendingErp, sendingAll, selected, loadingAllQad, loadAllQadProgress,

@@ -27,7 +27,7 @@ const emit = defineEmits(['toggle-select', 'toggle-select-all', 'row-click', 'se
 const tableRows = computed(() => props.visibleRows.map((r, idx) => {
   const counted = toInt(r.counted_qty)
   const pid = String(r.product_id || '').trim()
-  const hasQad = pid && Object.prototype.hasOwnProperty.call(props.stockByPid, pid)
+  const hasQad = pid && props.stockByPid[pid] != null
   const qadQty = hasQad ? toInt(props.stockByPid[pid]) : 0
   const committed = pid && props.committedByPid[pid] != null ? toInt(props.committedByPid[pid]) : 0
   const shipped = pid && props.shippedByPid[pid] != null ? toInt(props.shippedByPid[pid]) : 0

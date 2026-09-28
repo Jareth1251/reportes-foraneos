@@ -15,7 +15,7 @@ const user = computed(() => auth.user)
 
 const {
   isValidator, isAdminUser,
-  site, brands, brand, loading, rows, error, sessionDate,
+  site, brands, brand, loading, rows, error, sessionDate, sessionId, sessions, sessionSeq,
   selectedKey, breakdownLoading, breakdown, breakdownError,
   stockByPid, committedByPid, shippedByPid, qadError,
   sendingErp, sendingAll, selected, loadingAllQad, loadAllQadProgress,
@@ -87,10 +87,23 @@ onMounted(() => {
             <option v-for="b in brands" :key="b" :value="b">{{ b }}</option>
           </select>
         </div>
-        <button class="btn btn-sm btn-primary" :disabled="loading" @click="handleSearch">
+        <button class="btn btn-sm btn-primary" :disabled="loading" @click="handleSearch()">
           {{ loading ? 'BUSCANDO…' : 'BUSCAR' }}
         </button>
-        <div v-if="sessionDate" class="badge badge-info badge-outline self-end h-9">📅 Sesión: {{ sessionDate }}</div>
+        <div v-if="sessions.length > 1">
+          <label class="block text-xs font-black text-base-content/60 mb-1.5">Sesión</label>
+          <select
+            class="select select-sm w-full"
+            :value="sessionId || ''"
+            :disabled="loading"
+            @change="handleSearch($event.target.value)"
+          >
+            <option v-for="s in sessions" :key="s.id" :value="s.id">
+              {{ s.session_date }} · conteo {{ s.seq || 1 }} · {{ s.validated_at ? 'validado' : 'sin validar' }} · {{ s.pending_skus != null ? `${s.pending_skus} por ajustar` : `${s.lines_count} líneas` }}
+            </option>
+          </select>
+        </div>
+        <div v-else-if="sessionDate" class="badge badge-info badge-outline self-end h-9">📅 Sesión: {{ sessionDate }}<template v-if="sessionSeq > 1"> · conteo {{ sessionSeq }}</template></div>
         <span></span>
       </div>
 
@@ -126,7 +139,7 @@ onMounted(() => {
             MOSTRAR MÁS
           </button>
           <button v-if="isValidator && rows.length > 0 && !sessionValidated" class="btn btn-xs btn-success" :disabled="validating" @click="handleValidateSession">
-            {{ validating ? 'Validando…' : '✅ Validar sesión del día' }}
+            {{ validating ? 'Validando…' : '✅ Validar sesión' }}
           </button>
           <div v-if="sessionValidated" class="badge badge-success badge-outline">
             ✅ Validado por {{ sessionInfo?.validated_by_name || sessionInfo?.validated_by }} · {{ fmtDate(sessionInfo?.validated_at) }}
