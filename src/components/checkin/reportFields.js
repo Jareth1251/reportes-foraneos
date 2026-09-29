@@ -20,7 +20,7 @@ export const DETALLE_FIELDS = {
   usr_name_paying: 'Le atendió en cajas', usr_name_transferencia: 'Lo mandó a Transferencia',
   usr_name_stocked: 'Lo atendió en Almacén', usr_name_at_stock: 'Lo surtió',
   usr_name_at_deliver: 'Asignó la Entrega', usr_name_delivered: 'Lo Entregó',
-  cancel_comment: 'Razón de Cancelación', arrive_at: 'Fecha',
+  cancel_comment: 'Razón de Cancelación', usr_name_canceled: 'Lo canceló', arrive_at: 'Fecha',
 }
 
 export const ALMACEN_FIELDS = {
