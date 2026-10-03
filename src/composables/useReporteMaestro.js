@@ -32,8 +32,9 @@ function clasificacionPor(qty) {
 }
 
 function hmsToMs(hms) {
-  const [h, m, sec] = String(hms || '').split(':').map(Number)
-  if ([h, m, sec].some((n) => Number.isNaN(n))) return 0
+  const match = /^(-?\d+):(\d{1,2}):(\d{1,2})/.exec(String(hms || '').trim())
+  if (!match) return 0
+  const [, h, m, sec] = match.map(Number)
   return ((h * 60 + m) * 60 + sec) * 1000
 }
 
