@@ -18,7 +18,7 @@ const siteFilter = ref(SITIOS[0].id)
 
 const { loading, dateStart, dateEnd, rows, fetchAll, shiftDay } = useReporteMaestro(siteFilter)
 
-const AREAS = ['Tienda', 'Foráneo', 'Domicilio', 'Página']
+const AREAS = ['Tienda', 'Cliente pasa', 'Foráneo', 'Domicilio', 'Página']
 const areaFilter = ref('todas')
 const searchText = ref('')
 

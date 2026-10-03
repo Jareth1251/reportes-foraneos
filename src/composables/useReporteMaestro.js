@@ -141,6 +141,58 @@ function mapForaneoRow(order, seq, area) {
   return row
 }
 
+// Pedido foráneo que el cliente recoge en tienda: nace en remote_orders y
+// termina su flujo como checkin (send-to-checkin / pickup-and-send), así que
+// aparece en ambas fuentes con el mismo número de pedido.
+function isClientePasa(order) {
+  const c = normCarrier(order?.carrier)
+  return c === 'cliente' || c === 'cliente_pasa' || c === 'cliente-pasa' ||
+    String(order?.order_status || '').toUpperCase() === 'PASA_TIENDA'
+}
+
+function erpKeys(value) {
+  return String(value || '').split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean)
+}
+
+// Columnas que identifican la fila de tienda y no se toman del foráneo.
+const MERGE_SKIP = new Set(['area', 'turn', 'name', 'erp_order', 'fecha'])
+
+// Une cada foráneo "cliente pasa" con su(s) turno(s) de tienda: la fila de
+// tienda conserva su trazabilidad (piso/cajas/almacén) y el foráneo completa lo
+// que tienda no tiene (asesor, paquetería, factura, facturado por...). El
+// foráneo deja de salir por separado solo si encontró al menos un turno; si el
+// turno cae fuera del rango de fechas, se sigue viendo la fila del foráneo.
+function mergeClientePasa(tiendaRows, foraneos) {
+  const tiendaByErp = new Map()
+  for (const row of tiendaRows) {
+    for (const key of erpKeys(row.erp_order)) {
+      if (!tiendaByErp.has(key)) tiendaByErp.set(key, [])
+      tiendaByErp.get(key).push(row)
+    }
+  }
+
+  const mergedIds = new Set()
+  for (const { order, row: foraneoRow } of foraneos) {
+    if (!isClientePasa(order)) continue
+    const keys = erpKeys([order.erp_order_id, ...(order.erp_group_list || [])].join(','))
+    const matches = new Set(keys.flatMap((k) => tiendaByErp.get(k) || []))
+    if (!matches.size) continue
+
+    for (const tiendaRow of matches) {
+      tiendaRow.area = 'Cliente pasa'
+      for (const [field, value] of Object.entries(foraneoRow)) {
+        if (MERGE_SKIP.has(field)) continue
+        const current = tiendaRow[field]
+        if ((current === NA || current === '' || current == null) && value !== NA && value !== '' && value != null) {
+          tiendaRow[field] = value
+        }
+      }
+    }
+    mergedIds.add(order.id)
+  }
+  return mergedIds
+}
+
 function parsePaidAt(value) {
   if (!value) return null
   const [datePart, timePart] = String(value).split(' ')
@@ -245,12 +297,15 @@ export function useReporteMaestro(site) {
         .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
 
       const perDay = {}
-      const foraneoRows = foraneosSorted.map((o) => {
+      const foraneos = foraneosSorted.map((o) => {
         const dateKey = o.created_at ? String(o.created_at).slice(0, 10) : '—'
         perDay[dateKey] = (perDay[dateKey] || 0) + 1
         const area = normCarrier(o.carrier) === 'domicilio' ? 'Domicilio' : 'Foráneo'
-        return mapForaneoRow(o, perDay[dateKey], area)
+        return { order: o, row: mapForaneoRow(o, perDay[dateKey], area) }
       })
+
+      const mergedIds = mergeClientePasa(tiendaRows.value, foraneos)
+      const foraneoRows = foraneos.filter(({ order }) => !mergedIds.has(order.id)).map(({ row }) => row)
 
       const paginaRows = (paginaData || []).map(mapPaginaRow)
 
