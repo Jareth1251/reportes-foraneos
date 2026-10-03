@@ -13,6 +13,7 @@ import OrderCard            from '@/components/almacen/OrderCard.vue'
 import AgentPickerModal     from '@/components/almacen/AgentPickerModal.vue'
 import ConfirmModal         from '@/components/almacen/ConfirmModal.vue'
 import GuiaModal            from '@/components/almacen/GuiaModal.vue'
+import IncidentModal        from '@/components/almacen/IncidentModal.vue'
 
 const auth  = useAuthStore()
 const store = useForaneosStore()
@@ -41,6 +42,7 @@ const deliverModal     = ref(null)
 const deliverName      = ref('')
 const returnModal      = ref(null)
 const returnReason     = ref('')
+const incidentOpen     = ref(false)
 
 const warehouseAgents = ref([])
 const agentsLoading   = ref(false)
@@ -283,6 +285,7 @@ function openEmpacador(order)   { empacadorModal.value   = { order }; loadAgents
 function openEnviar(order)      { envioModal.value = { order }; guiaInput.value = '' }
 function openDeliver(order)     { deliverModal.value = { order }; deliverName.value = auth.user?.name ?? '' }
 function openReturn(order)      { returnModal.value = { order }; returnReason.value = '' }
+function openIncident()         { incidentOpen.value = true; loadAgents() }
 
 // ── Imprimir ───────────────────────────────────────────────────────────────
 function buildPrintOrders(item, turn) {
@@ -341,6 +344,10 @@ async function handlePrint(order) {
                 style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;color:#fff;"
                 :style="{ backgroundColor: onlyDomicilio ? '#9C27B0' : '#000' }">
           {{ onlyDomicilio ? 'Ver Foráneos' : 'Ver Domicilio' }}
+        </button>
+        <button v-if="!isViewOnly" @click="openIncident"
+                style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;color:#fff;background-color:#EF6C00;">
+          ⚠️ Registrar incidencia
         </button>
       </div>
       <div class="navbar-center">
@@ -576,6 +583,17 @@ async function handlePrint(order) {
       :action-loading="!!store.actionLoading"
       @close="guiaModal = null"
       @confirm="confirmGuia"
+    />
+
+    <!-- Modal: Incidencia de surtido -->
+    <IncidentModal
+      :open="incidentOpen"
+      :orders="store.orders"
+      :agents="warehouseAgents" :agents-loading="agentsLoading"
+      :user="auth.user"
+      @close="incidentOpen = false"
+      @saved="showToast('success', 'Incidencia registrada')"
+      @error="msg => showToast('error', msg)"
     />
 
     <PrintOrderView ref="printViewRef" />
