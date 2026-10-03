@@ -31,6 +31,27 @@ function clasificacionPor(qty) {
   return Number(qty) > 20 ? 'Mayoreo' : 'Menudeo'
 }
 
+function hmsToMs(hms) {
+  const [h, m, sec] = String(hms || '').split(':').map(Number)
+  if ([h, m, sec].some((n) => Number.isNaN(n))) return 0
+  return ((h * 60 + m) * 60 + sec) * 1000
+}
+
+function msToHms(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const h = String(Math.floor(total / 3600)).padStart(2, '0')
+  const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0')
+  const sec = String(total % 60).padStart(2, '0')
+  return `${h}:${m}:${sec}`
+}
+
+// Tiempo Total sin el tiempo en pausa; vacío si el turno no se ha entregado.
+function totalSinPausa(startAt, deliveredAt, pausedMs) {
+  if (!startAt || !deliveredAt) return ''
+  const ms = new Date(deliveredAt) - new Date(startAt)
+  return Number.isNaN(ms) ? '' : msToHms(ms - pausedMs)
+}
+
 function mapTiendaRow(r) {
   const row = naRow()
   Object.assign(row, {
@@ -77,8 +98,14 @@ function mapTiendaRow(r) {
     tiempo_almacen: r.diff_warehouse_at || '',
     tiempo_tienda: r.diff_total_at || '',
     tiempo_pausado: r.diffpaused_at || '',
+    tiempo_total: totalSinPausa(r.arrive_at, r.delivered_at, hmsToMs(r.diffpaused_at)),
     clasificacion: clasificacionPor(r.quantity),
     fecha: String(r.arrive_at || '').slice(0, 10),
+  })
+  // Datos crudos para recalcular el Tiempo Total al unir con un foráneo
+  // (no enumerable: no se muestra ni se exporta como columna).
+  Object.defineProperty(row, '_timing', {
+    value: { deliveredAt: r.delivered_at, pausedMs: hmsToMs(r.diffpaused_at) },
   })
   return row
 }
@@ -187,6 +214,9 @@ function mergeClientePasa(tiendaRows, foraneos) {
           tiendaRow[field] = value
         }
       }
+      // Todo el recorrido: desde que se capturó el foráneo hasta la entrega en tienda.
+      const { deliveredAt, pausedMs } = tiendaRow._timing || {}
+      tiendaRow.tiempo_total = totalSinPausa(order.created_at, deliveredAt, pausedMs || 0)
     }
     mergedIds.add(order.id)
   }
