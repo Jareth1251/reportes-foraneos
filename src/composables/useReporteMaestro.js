@@ -104,9 +104,13 @@ function mapTiendaRow(r) {
     fecha: String(r.arrive_at || '').slice(0, 10),
   })
   // Datos crudos para recalcular el Tiempo Total al unir con un foráneo
-  // (no enumerable: no se muestra ni se exporta como columna).
+  // (no enumerable: no se muestra ni se exporta como columna). Debe ser
+  // writable/configurable: las filas viven en un ref() de Vue y el Proxy
+  // reactivo lanza TypeError al leer una propiedad de solo lectura.
   Object.defineProperty(row, '_timing', {
     value: { deliveredAt: r.delivered_at, pausedMs: hmsToMs(r.diffpaused_at) },
+    writable: true,
+    configurable: true,
   })
   return row
 }
