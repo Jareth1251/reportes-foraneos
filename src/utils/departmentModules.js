@@ -13,6 +13,7 @@ export const MODULE_DEFS = {
   'indicadores-reporte':    { key: 'indicadores-reporte',    icon: '📈', label: 'Indicadores',                desc: 'Ventas por vendedor: clientes, presupuesto, potencial y desglose por línea de producto.', color: '#0F766E', bg: '#CCFBF1', border: '#5EEAD4' },
   'cajeras-sucursal':       { key: 'cajeras-sucursal',       icon: '🧑‍💼', label: 'Cajeras y Sucursal',      desc: 'Asignar cajeras a sucursales y paqueterías, y administrar cuáles aparecen en el selector.', color: '#9D174D', bg: '#FCE7F3', border: '#F9A8D4' },
   'inventario-conteo':      { key: 'inventario-conteo',      icon: '📦', label: 'Inventario (Conteo vs QAD)', desc: 'Consultar conteos por marca contra el stock de QAD, validar sesiones y enviar conteos cíclicos.', color: '#1E3A8A', bg: '#DBEAFE', border: '#93C5FD' },
+  'videos-pantallas':       { key: 'videos-pantallas',       icon: '🎬', label: 'Videos de Pantallas',        desc: 'Subir, ordenar y activar los videos promocionales que se intercalan con los turnos en las pantallas.', color: '#C2410C', bg: '#FFEDD5', border: '#FDBA74' },
   'agentes-almacen':        { key: 'agentes-almacen',        icon: '👤', label: 'Agentes de Almacén',         desc: 'Alta, edición y baja de agentes que surten y despachan pedidos foráneos.',                color: '#455A64', bg: '#ECEFF1', border: '#B0BEC5' },
 }
 
@@ -22,13 +23,14 @@ const ALL_REPORTS = ['foraneos-reporte', 'checkin-reporte', 'pedidos-pagina-repo
 // warehouseManagerScope (login), no por departamento — así lo autoriza el
 // backend (WarehouseAgentController::MANAGER_SCOPES).
 const DEPT_MODULE_KEYS = {
-  '001': ['foraneos', 'almacen', ...ALL_REPORTS, 'cajeras-sucursal', 'inventario-conteo'],
-  '002': ['foraneos', 'almacen', ...ALL_REPORTS, 'cajeras-sucursal', 'inventario-conteo'],
+  '001': ['foraneos', 'almacen', ...ALL_REPORTS, 'cajeras-sucursal', 'inventario-conteo', 'videos-pantallas'],
+  '002': ['foraneos', 'almacen', ...ALL_REPORTS, 'cajeras-sucursal', 'inventario-conteo', 'videos-pantallas'],
   '003': [...ALL_REPORTS, 'inventario-conteo'],
   '004': ['cajas', ...ALL_REPORTS, 'inventario-conteo'],
   '005': [...ALL_REPORTS, 'inventario-conteo'],
   '006': [...ALL_REPORTS, 'inventario-conteo'],
   '007': ['almacen', ...ALL_REPORTS, 'inventario-conteo', 'reporte-maestro'],
+  '008': ['videos-pantallas'],
 }
 
 const DEFAULT_MODULE_KEYS = ['foraneos', ...ALL_REPORTS]

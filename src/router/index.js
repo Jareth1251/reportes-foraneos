@@ -122,6 +122,13 @@ const router = createRouter({
       beforeEnter: guardModuleRoute('inventario-conteo'),
     },
     {
+      path: '/videos-pantallas',
+      name: 'videos-pantallas',
+      component: () => import('@/views/ScreenVideosView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: guardModuleRoute('videos-pantallas'),
+    },
+    {
       path: '/agentes-almacen',
       name: 'agentes-almacen',
       component: () => import('@/views/WarehouseAgentsView.vue'),
