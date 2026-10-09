@@ -466,11 +466,22 @@ export function useInventoryLookup(user) {
     }
   }
 
-  async function sendSingleCount(r) {
+  // QAD descuenta al facturar/remisionar, pero esas piezas siguen en el rack hasta
+  // surtirse: lo que se manda a QAD es lo contado menos comprometido y remisionado.
+  function qadAdjustment(r) {
     const pid = String(r.product_id || '').trim()
     const counted = toInt(r.counted_qty)
-    const hasQad = pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid)
+    const committed = pid && committedByPid.value[pid] != null ? toInt(committedByPid.value[pid]) : 0
+    const shipped = pid && shippedByPid.value[pid] != null ? toInt(shippedByPid.value[pid]) : 0
+    const toSend = counted - committed - shipped
+    const hasQad = !!pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid)
     const qadQty = hasQad ? toInt(stockByPid.value[pid]) : null
+    const diff = hasQad ? toSend - qadQty : null
+    return { pid, counted, committed, shipped, toSend, hasQad, qadQty, diff }
+  }
+
+  async function sendSingleCount(r) {
+    const { pid, toSend, hasQad, qadQty } = qadAdjustment(r)
 
     if (!pid) throw new Error('El producto no tiene ID (product_id)')
     if (!hasQad) throw new Error('No se ha cargado el stock QAD para este producto')
@@ -481,7 +492,7 @@ export function useInventoryLookup(user) {
         items: [{
           productId: pid,
           siteId: site.value,
-          qty: counted,
+          qty: toSend,
           qad_qty: qadQty,
           article: r.article || '',
           brand_name: r.brand_name || '',
@@ -503,11 +514,7 @@ export function useInventoryLookup(user) {
   }
 
   async function handleSendToErp(r) {
-    const pid = String(r.product_id || '').trim()
-    const counted = toInt(r.counted_qty)
-    const hasQad = pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid)
-    const qadQty = hasQad ? toInt(stockByPid.value[pid]) : null
-    const diff = hasQad ? counted - qadQty : null
+    const { pid, counted, committed, shipped, toSend, hasQad, qadQty, diff } = qadAdjustment(r)
 
     if (!pid) { Swal.fire('Sin product_id', 'Esta fila no tiene product_id.', 'warning'); return }
 
@@ -528,6 +535,9 @@ export function useInventoryLookup(user) {
           <b>Site:</b> ${siteLabel(site.value)} (${site.value})<br/>
           <hr style="margin:8px 0"/>
           <b>Contado:</b> ${counted} pzas<br/>
+          ${committed ? `<b>Comprometidas:</b> −${committed} pzas<br/>` : ''}
+          ${shipped ? `<b>Remisionadas:</b> −${shipped} pzas<br/>` : ''}
+          <b>Se enviará a QAD:</b> ${toSend} pzas<br/>
           ${hasQad ? `<b>QAD actual:</b> ${qadQty} pzas<br/>` : ''}
           <b>Diferencia:</b> ${diffText}
         </div>`,
@@ -544,7 +554,7 @@ export function useInventoryLookup(user) {
       const next = { ...stockByPid.value }
       delete next[pid]
       stockByPid.value = next
-      await Swal.fire({ icon: 'success', title: 'Conteo cíclico enviado', html: `<b>${pid}</b> — ${counted} pzas.` })
+      await Swal.fire({ icon: 'success', title: 'Conteo cíclico enviado', html: `<b>${pid}</b> — ${toSend} pzas.` })
       handleSearch()
     } catch (e) {
       Swal.fire('Error al enviar conteo', e.message || 'No se pudo enviar el conteo cíclico.', 'error')
@@ -574,7 +584,7 @@ export function useInventoryLookup(user) {
   async function handleSendSelected() {
     if (!selected.value.size) return
     const selRows = Array.from(selected.value.values())
-    const totalQty = selRows.reduce((a, r) => a + toInt(r.counted_qty), 0)
+    const totalQty = selRows.reduce((a, r) => a + qadAdjustment(r).toSend, 0)
 
     const confirm = await Swal.fire({
       icon: 'question',
@@ -591,11 +601,10 @@ export function useInventoryLookup(user) {
     sendingErp.value = '__bulk__'
     try {
       const items = selRows.map((r) => {
-        const pid = String(r.product_id || '').trim()
-        const hasQ = pid && Object.prototype.hasOwnProperty.call(stockByPid.value, pid)
+        const { pid, toSend, qadQty } = qadAdjustment(r)
         return {
-          productId: pid, siteId: site.value, qty: toInt(r.counted_qty),
-          qad_qty: hasQ ? toInt(stockByPid.value[pid]) : null,
+          productId: pid, siteId: site.value, qty: toSend,
+          qad_qty: qadQty,
           article: r.article || '', brand_name: r.brand_name || '',
           color_label: r.color_label || '', size_label: r.size_label || '',
         }
@@ -635,7 +644,7 @@ export function useInventoryLookup(user) {
       return
     }
 
-    const totalQty = eligibleRows.reduce((a, r) => a + toInt(r.counted_qty), 0)
+    const totalQty = eligibleRows.reduce((a, r) => a + qadAdjustment(r).toSend, 0)
     const confirm = await Swal.fire({
       icon: 'question',
       title: `¿Enviar ${eligibleRows.length} artículos a QAD?`,
@@ -801,11 +810,14 @@ export function useInventoryLookup(user) {
     const uniquePids = Array.from(new Set(visibleRows.value.map((r) => String(r.product_id || '').trim()).filter(Boolean)))
     const hasAllStock = uniquePids.length > 0 && uniquePids.every((pid) => Object.prototype.hasOwnProperty.call(stockByPid.value, pid))
     if (!hasAllStock) return { totalCounted, totalQad: null, diff: null, hasAllStock: false }
-    const totalQad = visibleRows.value.reduce((a, r) => {
-      const pid = String(r.product_id || '').trim()
-      return a + toInt(pid ? stockByPid.value[pid] : null)
-    }, 0)
-    return { totalCounted, totalQad, diff: totalCounted - totalQad, hasAllStock: true }
+    let totalQad = 0
+    let diff = 0
+    for (const r of visibleRows.value) {
+      const adj = qadAdjustment(r)
+      totalQad += toInt(adj.qadQty)
+      diff += adj.diff
+    }
+    return { totalCounted, totalQad, diff, hasAllStock: true }
   })
 
   const allVisibleSelected = computed(() =>
