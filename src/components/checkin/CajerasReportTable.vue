@@ -1,0 +1,235 @@
+<script setup>
+import { onMounted, watch, toRef, ref, computed } from 'vue'
+import ExcelJS from 'exceljs'
+import DateRangeToolbar from './DateRangeToolbar.vue'
+import CajeraDetailModal from './CajeraDetailModal.vue'
+import { useCajerasReport } from '@/composables/useCajerasReport'
+import { styleHeaderRow, downloadWorkbook } from '@/utils/excelExport'
+
+const props = defineProps({
+  dateStart: { type: String, required: true },
+  dateEnd: { type: String, required: true },
+})
+
+const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'setRange'])
+
+const {
+  checkinsLoading,
+  foraneosLoading,
+  fetchAllCajeras,
+  cajerasReport,
+  cajerasDetail,
+  cajeraTimingReport,
+  pageOrdersInvoicedCount,
+  fetchPageOrdersInvoicedCount,
+} = useCajerasReport(toRef(props, 'dateStart'), toRef(props, 'dateEnd'))
+
+const selectedCajera = ref(null)
+const selectedDetail = computed(() => selectedCajera.value ? (cajerasDetail.value[selectedCajera.value] || { checkinRows: [], foraneoRows: [] }) : null)
+
+function openCajeraDetail(cajera) {
+  selectedCajera.value = cajera
+}
+function closeCajeraDetail() {
+  selectedCajera.value = null
+}
+
+function fetchAll() {
+  fetchAllCajeras()
+  fetchPageOrdersInvoicedCount()
+}
+
+onMounted(fetchAll)
+watch(() => [props.dateStart, props.dateEnd], fetchAll)
+
+function handleRefresh() {
+  fetchAll()
+}
+
+function setQuickRange(type) {
+  const today = new Date()
+  const hoy = today.toISOString().slice(0, 10)
+  let start = hoy
+  let end = hoy
+  if (type === 'ayer') {
+    const y = new Date(today); y.setDate(y.getDate() - 1)
+    const ymd = y.toISOString().slice(0, 10)
+    start = ymd; end = ymd
+  } else if (type === '7d') {
+    const s = new Date(today); s.setDate(s.getDate() - 6)
+    start = s.toISOString().slice(0, 10); end = hoy
+  } else if (type === 'mes') {
+    const d = today
+    start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+    end   = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10)
+  }
+  emit('setRange', { start, end })
+}
+
+async function exportCajeras() {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Reporte de Turnos'
+  wb.created = new Date()
+
+  const wsResumen = wb.addWorksheet('Resumen Cajeras', { views: [{ state: 'frozen', ySplit: 1 }] })
+  wsResumen.columns = [
+    { header: 'Cajera', key: 'cajera', width: 28 },
+    { header: 'Checkins Facturados', key: 'checkins', width: 22 },
+    { header: 'Pedidos de Página', key: 'pagina', width: 20 },
+    { header: 'Foráneos Facturados', key: 'foraneos', width: 22 },
+    { header: 'Total', key: 'total', width: 12 },
+  ]
+  cajerasReport.value.forEach((r) => wsResumen.addRow(r))
+  if (pageOrdersInvoicedCount.value != null) {
+    wsResumen.addRow({
+      cajera: 'PÁGINA WEB',
+      checkins: '—',
+      pagina: '—',
+      foraneos: '—',
+      total: pageOrdersInvoicedCount.value,
+    })
+  }
+  const totalRow = wsResumen.addRow({
+    cajera: 'TOTAL',
+    checkins: cajerasReport.value.reduce((s, r) => s + r.checkins, 0),
+    pagina: cajerasReport.value.reduce((s, r) => s + r.pagina, 0),
+    foraneos: cajerasReport.value.reduce((s, r) => s + r.foraneos, 0),
+    total: cajerasReport.value.reduce((s, r) => s + r.total, 0) + (pageOrdersInvoicedCount.value || 0),
+  })
+  totalRow.font = { bold: true }
+  styleHeaderRow(wsResumen)
+
+  const wsPromedios = wb.addWorksheet('Promedios Atención', { views: [{ state: 'frozen', ySplit: 1 }] })
+  wsPromedios.columns = [
+    { header: 'Cajera', key: 'cajera', width: 28 },
+    { header: 'Espera Checkin', key: 'avgEspera', width: 16 },
+    { header: 'Cobro Checkin', key: 'avgCobro', width: 16 },
+    { header: 'Total Checkin', key: 'avgTotalCheckin', width: 16 },
+    { header: 'Espera Foráneo', key: 'avgEsperaForaneo', width: 18 },
+    { header: 'Atención → Factura (Foráneo)', key: 'avgAtencionForaneo', width: 28 },
+    { header: 'Total (Creación → Factura)', key: 'avgForaneo', width: 26 },
+  ]
+  cajeraTimingReport.value.forEach((r) => wsPromedios.addRow({
+    cajera: r.cajera,
+    avgEspera: r.checkinCount ? r.avgEspera : '—',
+    avgCobro: r.checkinCount ? r.avgCobro : '—',
+    avgTotalCheckin: r.checkinCount ? r.avgTotalCheckin : '—',
+    avgEsperaForaneo: r.foraneoAtendidoCount ? r.avgEsperaForaneo : '—',
+    avgAtencionForaneo: r.foraneoAtendidoCount ? r.avgAtencionForaneo : '—',
+    avgForaneo: r.foraneoCount ? r.avgForaneo : '—',
+  }))
+  styleHeaderRow(wsPromedios)
+
+  await downloadWorkbook(wb, `ReporteCajeras_${props.dateStart}_a_${props.dateEnd}.xlsx`)
+}
+</script>
+
+<template>
+  <div>
+    <DateRangeToolbar
+      class="mb-4"
+      :date-start="dateStart"
+      :date-end="dateEnd"
+      :loading="checkinsLoading || foraneosLoading"
+      @update:date-start="emit('update:dateStart', $event)"
+      @update:date-end="emit('update:dateEnd', $event)"
+      @shift="emit('shift', $event)"
+      @refresh="handleRefresh"
+    >
+      <button class="btn btn-sm btn-outline btn-sm" @click="setQuickRange('hoy')">Hoy</button>
+      <button class="btn btn-sm btn-outline btn-sm" @click="setQuickRange('ayer')">Ayer</button>
+      <button class="btn btn-sm btn-outline btn-sm" @click="setQuickRange('7d')">7 días</button>
+      <button class="btn btn-sm btn-outline btn-sm" @click="setQuickRange('mes')">Este mes</button>
+      <template #actions>
+        <button class="btn btn-sm btn-success" @click="exportCajeras">⬇ Exportar Excel</button>
+      </template>
+    </DateRangeToolbar>
+
+    <div v-if="checkinsLoading || foraneosLoading" class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+
+    <div v-else class="overflow-x-auto">
+      <p class="text-sm text-base-content/60 mb-2">{{ cajerasReport.length }} cajera(s) · {{ dateStart }} — {{ dateEnd }}</p>
+      <table class="table table-sm">
+        <thead>
+          <tr class="text-sm bg-base-200">
+            <th>Cajera</th>
+            <th class="text-center">Checkins Facturados</th>
+            <th class="text-center">Pedidos de Página</th>
+            <th class="text-center">Foráneos Facturados</th>
+            <th class="text-center font-bold">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="cajerasReport.length === 0 && pageOrdersInvoicedCount == null">
+            <td colspan="5" class="text-center text-base-content/40">Sin registros.</td>
+          </tr>
+          <tr
+            v-for="row in cajerasReport"
+            :key="row.cajera"
+            class="text-sm cursor-pointer hover:bg-base-200"
+            @click="openCajeraDetail(row.cajera)"
+          >
+            <td class="font-medium">{{ row.cajera }}</td>
+            <td class="text-center">{{ row.checkins }}</td>
+            <td class="text-center">{{ row.pagina }}</td>
+            <td class="text-center">{{ row.foraneos }}</td>
+            <td class="text-center font-bold">{{ row.total }}</td>
+          </tr>
+          <tr v-if="pageOrdersInvoicedCount != null" class="text-sm">
+            <td class="font-medium">PÁGINA WEB</td>
+            <td class="text-center">—</td>
+            <td class="text-center">—</td>
+            <td class="text-center">—</td>
+            <td class="text-center font-bold">{{ pageOrdersInvoicedCount }}</td>
+          </tr>
+          <tr v-if="cajerasReport.length > 0 || pageOrdersInvoicedCount != null" class="font-bold bg-base-200 text-sm">
+            <td>TOTAL</td>
+            <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.checkins, 0) }}</td>
+            <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.pagina, 0) }}</td>
+            <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.foraneos, 0) }}</td>
+            <td class="text-center">{{ cajerasReport.reduce((s, r) => s + r.total, 0) + (pageOrdersInvoicedCount || 0) }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 class="font-bold text-lg mt-6 mb-2">Promedios de Atención</h3>
+      <table class="table table-sm">
+        <thead>
+          <tr class="text-sm bg-base-200">
+            <th>Cajera</th>
+            <th class="text-center">Espera Checkin</th>
+            <th class="text-center">Cobro Checkin</th>
+            <th class="text-center">Total Checkin</th>
+            <th class="text-center">Espera Foráneo</th>
+            <th class="text-center">Atención → Factura (Foráneo)</th>
+            <th class="text-center">Total (Creación → Factura)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="cajeraTimingReport.length === 0">
+            <td colspan="7" class="text-center text-base-content/40">Sin registros.</td>
+          </tr>
+          <tr v-for="row in cajeraTimingReport" :key="row.cajera" class="text-sm">
+            <td class="font-medium">{{ row.cajera }}</td>
+            <td class="text-center">{{ row.checkinCount ? row.avgEspera : '—' }}</td>
+            <td class="text-center">{{ row.checkinCount ? row.avgCobro : '—' }}</td>
+            <td class="text-center">{{ row.checkinCount ? row.avgTotalCheckin : '—' }}</td>
+            <td class="text-center">{{ row.foraneoAtendidoCount ? row.avgEsperaForaneo : '—' }}</td>
+            <td class="text-center">{{ row.foraneoAtendidoCount ? row.avgAtencionForaneo : '—' }}</td>
+            <td class="text-center">{{ row.foraneoCount ? row.avgForaneo : '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <CajeraDetailModal
+      :open="!!selectedCajera"
+      :cajera="selectedCajera || ''"
+      :checkin-rows="selectedDetail?.checkinRows || []"
+      :foraneo-rows="selectedDetail?.foraneoRows || []"
+      @close="closeCajeraDetail"
+    />
+  </div>
+</template>

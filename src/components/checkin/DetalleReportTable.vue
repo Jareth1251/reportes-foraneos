@@ -1,0 +1,90 @@
+<script setup>
+import { ref, computed } from 'vue'
+import DateRangeToolbar from './DateRangeToolbar.vue'
+import { exportToExcel } from '@/utils/excelExport'
+import { DETALLE_FIELDS } from './reportFields'
+import { SITIOS } from '@/utils/cajerasSucursalHelpers'
+
+const props = defineProps({
+  rows: { type: Array, required: true },
+  dateStart: { type: String, required: true },
+  dateEnd: { type: String, required: true },
+  loading: { type: Boolean, default: false },
+})
+
+const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh'])
+
+// El backend numera los turnos por sucursal (site 3000 y 3100 reinician en 1),
+// así que se filtra siempre por una sola sucursal a la vez -- igual que Reporte Piso.
+const siteFilter = ref(SITIOS[0].id)
+
+const realDetail = computed(() => {
+  const start = props.dateStart ? new Date(props.dateStart + 'T00:00:00') : null
+  const end = props.dateEnd ? new Date(props.dateEnd + 'T23:59:59') : null
+  return props.rows.filter((r) => {
+    if (String(r.site ?? '') !== siteFilter.value) return false
+    if (Number(r.turn) <= 0) return false
+    if (!r.arrive_at) return true
+    const d = new Date(r.arrive_at)
+    if (isNaN(d)) return true
+    if (start && d < start) return false
+    if (end && d > end) return false
+    return true
+  })
+})
+const totalOrdersCount = computed(() => realDetail.value.reduce((acc, r) => acc + (r.erp_order_count || 0), 0))
+const fieldCount = Object.keys(DETALLE_FIELDS).length
+
+function exportDetalle() {
+  exportToExcel(realDetail.value, DETALLE_FIELDS, `ReporteTurnos_${siteFilter.value}_${props.dateStart}_a_${props.dateEnd}.xlsx`)
+}
+</script>
+
+<template>
+  <div>
+    <DateRangeToolbar
+      class="mb-4"
+      :date-start="dateStart"
+      :date-end="dateEnd"
+      :loading="loading"
+      @update:date-start="emit('update:dateStart', $event)"
+      @update:date-end="emit('update:dateEnd', $event)"
+      @shift="emit('shift', $event)"
+      @refresh="emit('refresh')"
+    >
+      <div class="flex items-center gap-1">
+        <select v-model="siteFilter" class="select select-bordered select-sm w-36">
+          <option v-for="s in SITIOS" :key="s.id" :value="s.id">{{ s.label }}</option>
+        </select>
+      </div>
+      <template #actions>
+        <button class="btn btn-sm btn-success" @click="exportDetalle">⬇ Exportar Excel</button>
+      </template>
+    </DateRangeToolbar>
+
+    <div v-if="loading" class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+
+    <div v-else class="overflow-x-auto">
+      <p class="text-sm text-base-content/60 mb-2">
+        Conteo de pedidos: {{ totalOrdersCount }} • {{ realDetail.length }} turnos
+      </p>
+      <table class="table table-sm">
+        <thead>
+          <tr class="text-sm">
+            <th v-for="(label, field) in DETALLE_FIELDS" :key="field">{{ label }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="realDetail.length === 0"><td :colspan="fieldCount" class="text-center text-base-content/40">Sin registros.</td></tr>
+          <tr v-for="(r, i) in realDetail" :key="r.id ?? i" class="text-sm">
+            <td v-for="(label, field) in DETALLE_FIELDS" :key="field" :class="{ 'max-w-48 truncate': field === 'name' }" :title="field === 'name' ? r.name : undefined">
+              {{ field === 'arrive_at' ? String(r.arrive_at || '').slice(0, 10) : r[field] }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</template>

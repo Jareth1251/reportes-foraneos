@@ -1,0 +1,131 @@
+<script setup>
+import { ref, computed } from 'vue'
+import DateRangeToolbar from './DateRangeToolbar.vue'
+import { exportToExcel } from '@/utils/excelExport'
+import { getAverageTime, isCreatedByFloorAgent, normalize } from '@/utils/reportTime'
+import { PISO_FIELDS } from './reportFields'
+import { SITIOS } from '@/utils/cajerasSucursalHelpers'
+
+const props = defineProps({
+  rows: { type: Array, required: true },
+  dateStart: { type: String, required: true },
+  dateEnd: { type: String, required: true },
+  loading: { type: Boolean, default: false },
+})
+
+const emit = defineEmits(['update:dateStart', 'update:dateEnd', 'shift', 'refresh'])
+
+const pisoAgentFilter = ref('')
+// El backend numera los turnos por sucursal (site 3000 y 3100 reinician en 1),
+// así que mostrarlos juntos confunde qué turno pertenece a cuál. Se filtra
+// siempre por una sola sucursal a la vez.
+const pisoSiteFilter = ref(SITIOS[0].id)
+
+const pisoDetail = computed(() => {
+  const start = props.dateStart ? new Date(props.dateStart + 'T00:00:00') : null
+  const end = props.dateEnd ? new Date(props.dateEnd + 'T23:59:59') : null
+  const inRange = props.rows.filter((r) => {
+    if (String(r.site ?? '') !== pisoSiteFilter.value) return false
+    if (!r.arrive_at) return true
+    const d = new Date(r.arrive_at)
+    if (isNaN(d)) return true
+    if (start && d < start) return false
+    if (end && d > end) return false
+    return true
+  })
+
+  const q = normalize(pisoAgentFilter.value)
+  if (!q) return inRange
+  return inRange.filter((r) =>
+    normalize(r.usr_name_order_created || '').includes(q) ||
+    normalize(r.usr_name_creating_order || '').includes(q) ||
+    normalize(r.usr_name_canceled || '').includes(q),
+  )
+})
+
+// Solo cuentan pedidos activos (no cancelados) creados por un agente de piso
+// en tienda -- excluye página web y los que llegan ya con pedido hecho
+// (remoto/agendado, sin creador asignado). Así cuadra con Picos de Clientes.
+const pisoActive = computed(() =>
+  pisoDetail.value.filter((i) => !['canceled', 'cancelled'].includes(String(i.status || '').toLowerCase())),
+)
+const pisoAgentCreated = computed(() => pisoActive.value.filter(isCreatedByFloorAgent))
+
+const pisoCounts = computed(() => {
+  const items = pisoDetail.value
+  const canceled = items.filter((i) => ['canceled', 'cancelled'].includes(String(i.status || '').toLowerCase())).length
+  const web = pisoActive.value.filter((i) => String(i.created_by_name || '').trim().toUpperCase() === 'PAGINA WEB').length
+  const created = pisoAgentCreated.value.length
+  return { web, piso: created, total: items.length, canceled, created }
+})
+
+function exportPiso() {
+  exportToExcel(pisoDetail.value, PISO_FIELDS, `ReportePiso_${pisoSiteFilter.value}_${props.dateStart}_a_${props.dateEnd}.xlsx`)
+}
+</script>
+
+<template>
+  <div>
+    <DateRangeToolbar
+      class="mb-2"
+      :date-start="dateStart"
+      :date-end="dateEnd"
+      :loading="loading"
+      @update:date-start="emit('update:dateStart', $event)"
+      @update:date-end="emit('update:dateEnd', $event)"
+      @shift="emit('shift', $event)"
+      @refresh="emit('refresh')"
+    >
+      <div class="flex items-center gap-1">
+        <select v-model="pisoSiteFilter" class="select select-bordered select-sm w-36">
+          <option v-for="s in SITIOS" :key="s.id" :value="s.id">{{ s.label }}</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-1">
+        <input v-model="pisoAgentFilter" type="text" placeholder="Filtrar por Agente de Piso..." class="input input-bordered input-sm w-56" />
+        <button v-if="pisoAgentFilter" class="btn btn-sm btn-ghost" @click="pisoAgentFilter = ''">✕</button>
+      </div>
+      <template #actions>
+        <button class="btn btn-sm btn-success" @click="exportPiso">⬇ Exportar Excel</button>
+      </template>
+    </DateRangeToolbar>
+
+    <div class="text-sm mb-4">
+      <h4 class="font-bold mb-1">Promedios</h4>
+      <ul class="list-none space-y-0.5">
+        <li>⏱️ Tiempo Promedio de Espera para Atención (llegada → inicio de atención en piso): {{ getAverageTime(pisoDetail, 'diff_creating_order_at') }}</li>
+        <li>⏱️ Tiempo Creación Pedido Promedio: {{ getAverageTime(pisoAgentCreated, 'diff_created_order') }}</li>
+        <li>📦 Pedidos creados por este agente: {{ pisoCounts.created }}</li>
+        <li>🌐 Pedidos creados por PAGINA WEB: {{ pisoCounts.web }}</li>
+        <li>🏬 Pedidos creados en PISO: {{ pisoCounts.piso }}</li>
+        <li>❌ Pedidos cancelados: {{ pisoCounts.canceled }}</li>
+      </ul>
+    </div>
+
+    <div v-if="loading" class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+
+    <div v-else class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr class="text-sm">
+            <th>Turno</th><th>Cliente</th><th>Pedido</th><th>Cant.</th><th>Estado Final</th>
+            <th>Registró Turno</th><th>Razón Cancelación</th><th>Lo canceló</th>
+            <th>T. Espera Atención</th><th>T. Creación Pedido</th><th>Le creó el Pedido</th><th>Fecha y Hora</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="pisoDetail.length === 0"><td colspan="12" class="text-center text-base-content/40">Sin registros.</td></tr>
+          <tr v-for="(r, i) in pisoDetail" :key="r.id ?? i" class="text-sm">
+            <td>{{ r.turn }}</td><td class="max-w-48 truncate" :title="r.name">{{ r.name }}</td>
+            <td>{{ r.erp_order_grouped }}</td><td>{{ r.quantity }}</td><td>{{ r.status_label }}</td>
+            <td>{{ r.usr_arrive_name }}</td><td>{{ r.cancel_comment }}</td><td>{{ r.usr_name_canceled }}</td>
+            <td>{{ r.diff_creating_order_at }}</td><td>{{ r.diff_created_order }}</td><td>{{ r.created_by_name }}</td>
+            <td>{{ [String(r.arrive_at || '').slice(0, 10), r.time_order_created_at].filter(Boolean).join(' ') }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</template>
