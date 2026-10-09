@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getWarehouseManagerScope } from '@/utils/warehouseManagerScope'
-import { isModuleAllowedForDept } from '@/utils/departmentModules'
+import { isModuleAllowedForUser } from '@/utils/departmentModules'
 
 const DEPT_ROUTES = {
   '004': 'selector',
@@ -24,9 +24,8 @@ function guardModuleRoute(routeName) {
   return () => {
     if (!sessionStorage.getItem(SESSION_KEY)) return { name: 'selector' }
 
-    const auth   = useAuthStore()
-    const deptId = String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim()
-    if (!isModuleAllowedForDept(deptId, routeName)) return { name: 'selector' }
+    const auth = useAuthStore()
+    if (!isModuleAllowedForUser(auth.user, routeName)) return { name: 'selector' }
   }
 }
 

@@ -35,10 +35,21 @@ const DEPT_MODULE_KEYS = {
 
 const DEFAULT_MODULE_KEYS = ['foraneos', ...ALL_REPORTS]
 
-export function getModuleKeysForDept(deptId) {
-  return DEPT_MODULE_KEYS[String(deptId ?? '').trim()] ?? DEFAULT_MODULE_KEYS
+// Excepciones por usuario (campo `agent`): pisan la tabla de su departamento.
+// dprado es de telemarketing pero está en el depto 008; conserva los reportes
+// que veía antes de que 008 tuviera módulos propios.
+const AGENT_MODULE_KEYS = {
+  'dprado': DEFAULT_MODULE_KEYS,
 }
 
-export function isModuleAllowedForDept(deptId, key) {
-  return getModuleKeysForDept(deptId).includes(key)
+export function getModuleKeysForUser(user) {
+  const agent = String(user?.agent ?? '').trim().toLowerCase()
+  if (AGENT_MODULE_KEYS[agent]) return AGENT_MODULE_KEYS[agent]
+
+  const deptId = String(user?.departmentId ?? user?.department_id ?? '').trim()
+  return DEPT_MODULE_KEYS[deptId] ?? DEFAULT_MODULE_KEYS
+}
+
+export function isModuleAllowedForUser(user, key) {
+  return getModuleKeysForUser(user).includes(key)
 }
