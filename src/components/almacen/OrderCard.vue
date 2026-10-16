@@ -1,5 +1,8 @@
 <script setup>
-defineProps({
+import { computed } from 'vue'
+import { getInvoiceScheduleInfo } from '@/utils/facturaHorario'
+
+const props = defineProps({
   order:         { type: Object,  required: true },
   bucket:        { type: String,  required: true },
   badgeColor:    { type: String,  default: '#00897B' },
@@ -18,6 +21,8 @@ defineEmits([
   'assign-despachador', 'assign-empacador',
   'enviar', 'deliver', 'open-guia', 'return', 'print',
 ])
+
+const invoiceSchedule = computed(() => getInvoiceScheduleInfo(props.order))
 
 function erpGroups(order) {
   if (Array.isArray(order.erp_group_list) && order.erp_group_list.length) return order.erp_group_list
@@ -50,6 +55,17 @@ function erpGroups(order) {
     <p style="margin:4px 0;"><b>Vendedor:</b> {{ order.sales_person || 'No asignado' }}</p>
     <p style="margin:4px 0;"><b>Paquetería:</b> {{ order.carrier || '—' }}</p>
     <p style="margin:4px 0;">📦 <b>Piezas:</b> {{ order.quantity_total || '—' }}</p>
+
+    <!-- Facturado dentro / fuera del horario de corte -->
+    <div v-if="invoiceSchedule"
+         :class="['factura-badge', invoiceSchedule.outsideSchedule ? 'factura-badge-warning' : 'factura-badge-success']"
+         :title="`Facturado a las ${invoiceSchedule.timeText} (límite ${invoiceSchedule.cutoffText} — ${invoiceSchedule.scope})`">
+      <span aria-hidden="true">🕒</span>
+      <span>
+        {{ invoiceSchedule.outsideSchedule ? 'Factura fuera de horario' : 'Facturado en horario' }}
+        — {{ invoiceSchedule.scope }}: {{ invoiceSchedule.timeText }}
+      </span>
+    </div>
 
     <!-- Surtidor badge (no se muestra en facturado) -->
     <div v-if="bucket !== 'facturado' && (order.surtidor_name || order.assigned_to_name)"
@@ -153,6 +169,9 @@ function erpGroups(order) {
 .pending-badge { background: #FFEBEE; color: #B71C1C; border: 1px solid #EF9A9A; border-radius: 6px; padding: 2px 6px; font-weight: 900; font-size: 11px; display: inline-flex; align-items: center; height: 20px; }
 .pending-blink { animation: blink-pend 1.2s ease-in-out infinite; }
 .erp-badge { background: #E3F2FD; color: #0D47A1; border: 1px solid #90CAF9; border-radius: 999px; padding: 2px 8px; font-size: 12px; line-height: 1.6; display: inline-flex; align-items: center; }
+.factura-badge { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.factura-badge-warning { background: #FFEBEE; border: 1px solid #EF9A9A; color: #C62828; }
+.factura-badge-success { background: #E8F5E9; border: 1px solid #A5D6A7; color: #1B5E20; }
 .comment-box { margin-top: 8px; background: #fff; border: 1px dashed #90caf9; border-radius: 8px; padding: 8px 10px; line-height: 1.3; font-size: 0.85rem; }
 .comment-text { white-space: pre-wrap; margin-top: 4px; max-height: 80px; overflow-y: auto; word-break: break-word; }
 @keyframes blink-pend { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }

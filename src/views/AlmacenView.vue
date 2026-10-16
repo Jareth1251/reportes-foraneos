@@ -39,7 +39,6 @@ const envioModal       = ref(null)
 const guiaInput        = ref('')
 const guiaModal        = ref(null)
 const deliverModal     = ref(null)
-const deliverName      = ref('')
 const returnModal      = ref(null)
 const returnReason     = ref('')
 const incidentOpen     = ref(false)
@@ -147,24 +146,29 @@ const filteredBase = computed(() => {
   )
 })
 
-const uniqueCarriers = computed(() => {
-  const seen = new Set()
-  for (const o of filteredBase.value) {
-    const c = (o.carrier || '').trim()
-    if (c) seen.add(c)
-  }
-  return [...seen].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
-})
-
 const filtered = computed(() =>
   activeCarrier.value
     ? filteredBase.value.filter(o => norm(o.carrier) === norm(activeCarrier.value))
     : filteredBase.value
 )
 
+// Base para los botones de paquetería: solo pedidos en buckets activos (sin entregados ni
+// históricos), así la suma por paquetería cuadra con la suma de las tabs — igual que POS.
+const ACTIVE_STATUSES = new Set(['facturado', 'surtiendo', 'surtido', 'empacando', 'enviado'])
+const carrierCountBase = computed(() => filteredBase.value.filter(o => ACTIVE_STATUSES.has(norm(o.status))))
+
+const uniqueCarriers = computed(() => {
+  const seen = new Set()
+  for (const o of carrierCountBase.value) {
+    const c = (o.carrier || '').trim()
+    if (c) seen.add(c)
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+})
+
 function getCarrierCount(carrier) {
-  if (!carrier) return filteredBase.value.length
-  return filteredBase.value.filter(o => norm(o.carrier) === norm(carrier)).length
+  if (!carrier) return carrierCountBase.value.length
+  return carrierCountBase.value.filter(o => norm(o.carrier) === norm(carrier)).length
 }
 
 // ── Tabs de status ─────────────────────────────────────────────────────────
@@ -253,9 +257,21 @@ async function confirmEnvio() {
   else showToast('error', res.message)
 }
 
-async function confirmDeliver() {
+// Al entregar se puede elegir un chofer o la paquetería del pedido (como en POS).
+const CARRIER_PREFIX = 'carrier:'
+const deliverOptions = computed(() => {
+  const carrier = (deliverModal.value?.order?.carrier || '').trim()
+  const carrierOption = carrier ? [{ id: `${CARRIER_PREFIX}${carrier}`, name: `Paquetería: ${carrier}` }] : []
+  return [...carrierOption, ...warehouseAgents.value]
+})
+
+async function confirmDeliver({ id, name }) {
   const { order } = deliverModal.value
-  const res = await store.almacenMarkAsDelivered(order.id, deliverName.value || auth.user?.name)
+  const isCarrier = String(id).startsWith(CARRIER_PREFIX)
+  const payload = isCarrier
+    ? { isCarrier: true,  carrier: String(id).slice(CARRIER_PREFIX.length), agentId: null, agentName: name, deliveredVia: 'carrier' }
+    : { isCarrier: false, carrier: null, agentId: id, agentName: name, deliveredVia: 'driver' }
+  const res = await store.deliver(order.id, payload)
   deliverModal.value = null
   if (res.ok) { showToast('success', 'Pedido entregado'); await store.fetchAlmacen() }
   else showToast('error', res.message)
@@ -283,7 +299,7 @@ function openSurtidor(order)    { surtidorModal.value    = { order }; loadAgents
 function openDespachador(order) { despachadorModal.value = { order }; loadAgents() }
 function openEmpacador(order)   { empacadorModal.value   = { order }; loadAgents() }
 function openEnviar(order)      { envioModal.value = { order }; guiaInput.value = '' }
-function openDeliver(order)     { deliverModal.value = { order }; deliverName.value = auth.user?.name ?? '' }
+function openDeliver(order)     { deliverModal.value = { order }; loadAgents() }
 function openReturn(order)      { returnModal.value = { order }; returnReason.value = '' }
 function openIncident()         { incidentOpen.value = true; loadAgents() }
 
@@ -539,24 +555,18 @@ async function handlePrint(order) {
       </label>
     </ConfirmModal>
 
-    <!-- Modal: Entregado -->
-    <ConfirmModal
+    <!-- Modal: Entregado (chofer o paquetería) -->
+    <AgentPickerModal
       :open="!!deliverModal" :order="deliverModal?.order"
-      title="Confirmar entrega" subtitle="El pedido quedará como entregado"
-      icon="✅" confirm-icon="✅" confirm-label="Confirmar entrega"
+      title="Seleccionar chofer o paquetería" icon="✅"
       gradient="linear-gradient(135deg,#388E3C,#1B5E20)"
-      info-bg="#F1F8F7" info-border="#C8E6C9" info-accent="#388E3C"
-      :show-carrier="false"
-      :loading="!!store.actionLoading"
+      highlight-bg="#E8F5E9" highlight-color="#388E3C"
+      confirm-label="Confirmar entrega"
+      :agents="deliverOptions" :agents-loading="agentsLoading"
+      :action-loading="!!store.actionLoading"
       @close="deliverModal = null"
       @confirm="confirmDeliver"
-    >
-      <label style="display:block;">
-        <span style="font-size:0.8rem;color:#555;font-weight:600;display:block;margin-bottom:4px;">Entregado por</span>
-        <input v-model="deliverName" type="text" placeholder="Nombre del responsable"
-               class="input input-bordered input-sm w-full" />
-      </label>
-    </ConfirmModal>
+    />
 
     <!-- Modal: Regresar al asesor -->
     <ConfirmModal
