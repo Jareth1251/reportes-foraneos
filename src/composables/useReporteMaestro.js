@@ -289,6 +289,42 @@ function mapPaginaRow(order) {
   return row
 }
 
+// Incidencias de surtido (registradas desde Almacén) por número de pedido.
+// Foráneos y página no tienen checkin_id, así que se buscan por erp_order_id
+// (incluidos los agregados) -- mismo endpoint que usa ForaneosRepView.vue.
+async function attachIncidents(entries) {
+  const erps = [...new Set(entries.flatMap(({ keys }) => keys))]
+  if (!erps.length) return
+  let rows = []
+  try {
+    const res = await fetch('/node-api/surtido-incident/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ erp_order_ids: erps }),
+    })
+    const data = await res.json()
+    rows = data?.result?.[0]?.data || []
+  } catch (err) {
+    console.error('[useReporteMaestro] error incidencias', err)
+    return
+  }
+  const byErp = new Map(rows.map((r) => [String(r.erp_order_id).toUpperCase(), r]))
+  for (const { row, keys, base } of entries) {
+    const found = keys.map((k) => byErp.get(k)).filter(Boolean)
+    row.incidencias = [base, ...found.map((r) => r.incidencias)].filter(Boolean).join('; ')
+    row.incidencias_agentes = [...new Set(
+      found.flatMap((r) => String(r.incidencias_agentes || '').split(', ')).filter(Boolean)
+    )].join(', ')
+  }
+}
+
+function erpKeysOf(...values) {
+  return values
+    .flat()
+    .map((e) => String(e || '').trim().toUpperCase())
+    .filter(Boolean)
+}
+
 export function useReporteMaestro(site) {
   const loading = ref(false)
   const dateStart = ref(ymdLocal())
@@ -340,9 +376,22 @@ export function useReporteMaestro(site) {
       })
 
       const mergedIds = mergeClientePasa(tiendaRows.value, foraneos)
-      const foraneoRows = foraneos.filter(({ order }) => !mergedIds.has(order.id)).map(({ row }) => row)
+      const foraneoEntries = foraneos
+        .filter(({ order }) => !mergedIds.has(order.id))
+        .map(({ order, row }) => {
+          const groupList = order.erp_group_list ?? order.group_list ?? order.groups ?? []
+          return { row, keys: erpKeysOf(order.erp_order_id, Array.isArray(groupList) ? groupList : []), base: '' }
+        })
 
-      const paginaRows = (paginaData || []).map(mapPaginaRow)
+      const paginaEntries = (paginaData || []).map((order) => {
+        const row = mapPaginaRow(order)
+        return { row, keys: erpKeysOf(order.erp_order_id), base: order.incomplete_reason || '' }
+      })
+
+      await attachIncidents([...foraneoEntries, ...paginaEntries])
+
+      const foraneoRows = foraneoEntries.map(({ row }) => row)
+      const paginaRows = paginaEntries.map(({ row }) => row)
 
       foraneoAndPaginaRows.value = [...foraneoRows, ...paginaRows]
     } catch (err) {
