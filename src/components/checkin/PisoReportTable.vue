@@ -93,7 +93,7 @@ function exportPiso() {
     <div class="text-sm mb-4">
       <h4 class="font-bold mb-1">Promedios</h4>
       <ul class="list-none space-y-0.5">
-        <li>⏱️ Tiempo Promedio de Espera para Atención (llegada → inicio de atención en piso): {{ getAverageTime(pisoDetail, 'diff_creating_order_at') }}</li>
+        <li>⏱️ Tiempo Promedio de Espera para Atención (llegada → inicio de atención en piso): {{ getAverageTime(pisoActive, 'diff_creating_order_at') }}</li>
         <li>⏱️ Tiempo Creación Pedido Promedio: {{ getAverageTime(pisoAgentCreated, 'diff_created_order') }}</li>
         <li>📦 Pedidos creados por este agente: {{ pisoCounts.created }}</li>
         <li>🌐 Pedidos creados por PAGINA WEB: {{ pisoCounts.web }}</li>
