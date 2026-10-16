@@ -341,6 +341,39 @@ function processOrder(order) {
   return o
 }
 
+function incidentKeys(o) {
+  const groupList = o.erp_group_list ?? o.group_list ?? o.groups ?? []
+  const original  = o.erp_order_id_original || o.erp_order_id_orig || o.erp_order_id_prev || null
+  return [o.erp_order_id, original, ...(Array.isArray(groupList) ? groupList : [])]
+    .map(e => String(e || '').trim().toUpperCase())
+    .filter(Boolean)
+}
+
+// Incidencias de surtido (registradas desde Almacén) por pedido, incluidos sus agregados.
+async function attachIncidents(list) {
+  const erps = [...new Set(list.flatMap(incidentKeys))]
+  if (!erps.length) return
+  let rows = []
+  try {
+    const res  = await fetch('/node-api/surtido-incident/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ erp_order_ids: erps }),
+    })
+    const data = await res.json()
+    rows = data?.result?.[0]?.data || []
+  } catch (e) {
+    console.error('[ForaneosRepView] error incidencias', e)
+    return
+  }
+  const byErp = new Map(rows.map(r => [String(r.erp_order_id).toUpperCase(), r]))
+  for (const o of list) {
+    const found = incidentKeys(o).map(k => byErp.get(k)).filter(Boolean)
+    o.incidencias = found.map(r => r.incidencias).filter(Boolean).join('; ')
+    o.incidencias_agentes = [...new Set(found.flatMap(r => String(r.incidencias_agentes || '').split(', ')).filter(Boolean))].join(', ')
+  }
+}
+
 async function fetchOrders() {
   loading.value = true
   try {
@@ -363,6 +396,8 @@ async function fetchOrders() {
       if (!acc[k] || timeValue(o) > timeValue(acc[k])) acc[k] = o
       return acc
     }, {}))
+
+    await attachIncidents(dedup)
 
     orders.value = dedup.sort((a, b) => {
       const ta = a.created_at ? new Date(a.created_at).getTime() : 0
@@ -509,6 +544,8 @@ function exportOrders() {
     'Vendedor': o.sales_person || '',
     'Facturado Por': o.facturado_por_name || '',
     'Comentarios': o.comentarios || '',
+    'Incidencias': o.incidencias || '',
+    'Agente con Incidencia': o.incidencias_agentes || '',
     'Hora Registro': o.time_created_at || '',
     'Hora Facturado': o.time_facturado_at || '',
     'Surtidor': o.surtidor_name || '',
@@ -782,6 +819,7 @@ onMounted(fetchOrders)
                     <th>Estatus</th><th>Factura</th><th>Régimen</th><th>Uso CFDI</th>
                     <th>Agregados</th><th>Paquetería</th><th>Guía</th>
                     <th>Vendedor</th><th>Facturado Por</th><th>Comentarios</th>
+                    <th>Incidencias</th><th>Agente con Incidencia</th>
                     <th>H. Registro</th><th>H. Facturado</th>
                     <th>Surtidor</th><th>H. Surtiendo</th><th>H. Surtido</th>
                     <th>Empacador</th><th>H. Empacando</th>
@@ -806,6 +844,8 @@ onMounted(fetchOrders)
                     <td>{{ o.sales_person || '—' }}</td>
                     <td>{{ o.facturado_por_name || '—' }}</td>
                     <td>{{ o.comentarios || '—' }}</td>
+                    <td class="max-w-64 whitespace-normal" :title="o.incidencias">{{ o.incidencias || '—' }}</td>
+                    <td>{{ o.incidencias_agentes || '—' }}</td>
                     <td class="tabular-nums">{{ o.time_created_at || '—' }}</td>
                     <td class="tabular-nums">{{ o.time_facturado_at || '—' }}</td>
                     <td>{{ o.surtidor_name || '—' }}</td>
