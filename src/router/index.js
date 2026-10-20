@@ -128,6 +128,19 @@ const router = createRouter({
       beforeEnter: guardModuleRoute('videos-pantallas'),
     },
     {
+      path: '/pantalla-comedor',
+      name: 'pantalla-comedor',
+      component: () => import('@/views/LoungeScreenView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: guardModuleRoute('pantalla-comedor'),
+    },
+    {
+      // Lo que abre la TV del comedor: público, la lista llega en el link (?p=).
+      path: '/tv/comedor',
+      name: 'tv-comedor',
+      component: () => import('@/views/LoungeScreenPlayerView.vue'),
+    },
+    {
       path: '/agentes-almacen',
       name: 'agentes-almacen',
       component: () => import('@/views/WarehouseAgentsView.vue'),
