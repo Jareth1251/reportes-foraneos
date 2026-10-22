@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -12,13 +12,21 @@ import {
   apiErrorMessage,
 } from '@/services/screenVideos'
 import {
-  LOUNGE_SCREEN,
+  LOUNGE_SCREENS,
   LOUNGE_MAX_UPLOAD_BYTES,
   LOUNGE_MAX_UPLOAD_MB,
   LOUNGE_MAX_DURATION_SECONDS,
+  MIN_SONGS_PER_BREAK,
+  MAX_SONGS_PER_BREAK,
+  DEFAULT_SONGS_PER_BREAK,
+  getLoungeConfig,
+  updateSongsPerBreak,
+  addSong,
+  updateSongTitle,
+  reorderSongs,
+  deleteSong,
+  toSongItem,
   parseYoutubeId,
-  loadPlaylist,
-  savePlaylist,
   clampSongsPerBreak,
   createRotation,
   buildScreenLink,
@@ -31,9 +39,12 @@ if (!sessionStorage.getItem('foraneos_module_chosen')) {
 
 const auth = useAuthStore()
 
-// Canciones: en este navegador. Comunicados: en API-Base.
-const playlist = ref(loadPlaylist())
-watch(playlist, savePlaylist, { deep: true })
+// Todo vive en API-Base; cada cambio le llega a la TV por Ably.
+// Canciones y "cada N canciones" son de la pantalla elegida; los comunicados
+// se listan todos y cada uno marca a qué comedores va.
+const screen   = ref(LOUNGE_SCREENS[0].key)
+const playlist = reactive({ songs: [], songsPerBreak: DEFAULT_SONGS_PER_BREAK })
+const screenName = computed(() => LOUNGE_SCREENS.find(s => s.key === screen.value)?.name ?? '')
 
 const announcements = ref([])
 const loading       = ref(false)
@@ -41,17 +52,17 @@ const error         = ref(null)
 const notice        = ref(null)
 const copied        = ref(false)
 
-const youtubeForm = reactive({ link: '', title: '', error: null })
+const youtubeForm = reactive({ link: '', title: '', saving: false, error: null })
 
-const upload = reactive({ file: null, title: '', metadata: null, progress: null, error: null })
+const upload = reactive({ file: null, title: '', screens: [screen.value], metadata: null, progress: null, error: null })
 const fileInput = ref(null)
 
-const screenLink = computed(() => buildScreenLink(playlist.value))
+const screenLink = computed(() => buildScreenLink(screen.value))
 
 // Mismo criterio que la playlist de API-Base: activo y con MP4 convertido.
 const playingAnnouncements = computed(() =>
   announcements.value
-    .filter(v => v.is_active && v.public_url)
+    .filter(v => v.is_active && v.public_url && v.screens.includes(screen.value))
     .map(v => ({ type: 'video', url: v.public_url, title: v.title })),
 )
 const hasProcessing = computed(() => announcements.value.some(v => v.status === 'processing'))
@@ -59,15 +70,41 @@ const hasProcessing = computed(() => announcements.value.some(v => v.status === 
 // Lo que la TV va a reproducir, con la misma lógica que usa ella.
 const PREVIEW_LENGTH = 14
 const sequencePreview = computed(() => {
-  const next = createRotation(playlist.value, playingAnnouncements.value)
+  const rotation = createRotation({
+    songs: playlist.songs,
+    songsPerBreak: playlist.songsPerBreak,
+    announcements: playingAnnouncements.value,
+  })
   const sequence = []
   for (let i = 0; i < PREVIEW_LENGTH; i++) {
-    const item = next()
+    const item = rotation.next()
     if (!item) break
     sequence.push(item)
   }
   return sequence
 })
+
+function applyConfig(forScreen, config) {
+  // Si cambiaron de pantalla mientras cargaba, la respuesta ya no sirve.
+  if (forScreen !== screen.value) return
+  playlist.songsPerBreak = clampSongsPerBreak(config.songs_per_break)
+  playlist.songs = (config.songs ?? []).map(song => ({ ...toSongItem(song), id: song.id }))
+}
+
+async function fetchAll() {
+  loading.value = true
+  error.value = null
+  try {
+    const forScreen = screen.value
+    const [config, videos] = await Promise.all([getLoungeConfig(forScreen), listScreenVideos('lounge')])
+    applyConfig(forScreen, config)
+    announcements.value = videos
+  } catch (e) {
+    error.value = apiErrorMessage(e, 'No se pudo cargar la pantalla del comedor')
+  } finally {
+    loading.value = false
+  }
+}
 
 async function fetchAnnouncements() {
   loading.value = true
@@ -81,34 +118,88 @@ async function fetchAnnouncements() {
   }
 }
 
-onMounted(fetchAnnouncements)
+onMounted(fetchAll)
+
+async function switchScreen(key) {
+  if (key === screen.value) return
+  screen.value = key
+  playlist.songs = []
+  error.value = null
+  if (upload.progress === null) upload.screens = [key]
+  try {
+    applyConfig(key, await getLoungeConfig(key))
+  } catch (e) {
+    error.value = apiErrorMessage(e, 'No se pudo cargar la pantalla')
+  }
+}
 
 // ── Canciones ──────────────────────────────────────────────────────────────
-function addYoutube() {
-  const videoId = parseYoutubeId(youtubeForm.link)
-  if (!videoId) { youtubeForm.error = 'No reconozco ese link. Pega el link de un video de YouTube (no de una lista).'; return }
-  playlist.value.songs.push({
-    key: `${Date.now()}-${videoId}`,
-    type: 'youtube',
-    videoId,
-    title: youtubeForm.title.trim() || `YouTube ${videoId}`,
-  })
-  Object.assign(youtubeForm, { link: '', title: '', error: null })
+async function addYoutube() {
+  const youtubeId = parseYoutubeId(youtubeForm.link)
+  if (!youtubeId) { youtubeForm.error = 'No reconozco ese link. Pega el link de un video de YouTube (no de una lista).'; return }
+  youtubeForm.error = null
+  youtubeForm.saving = true
+  try {
+    const song = await addSong(screen.value, { youtubeId, title: youtubeForm.title.trim() || `YouTube ${youtubeId}` })
+    playlist.songs.push({ ...toSongItem(song), id: song.id })
+    Object.assign(youtubeForm, { link: '', title: '' })
+  } catch (e) {
+    youtubeForm.error = apiErrorMessage(e, 'No se pudo agregar la canción')
+  } finally {
+    youtubeForm.saving = false
+  }
 }
 
-function moveSong(index, delta) {
-  const songs = playlist.value.songs
+async function saveSongTitle(song, value) {
+  const title = String(value || '').trim()
+  if (!title || title === song.title) return
+  error.value = null
+  try {
+    await updateSongTitle(screen.value, song.id, title)
+    song.title = title
+  } catch (e) {
+    error.value = apiErrorMessage(e, 'No se pudo guardar el título')
+  }
+}
+
+async function moveSong(index, delta) {
   const target = index + delta
-  if (target < 0 || target >= songs.length) return
-  ;[songs[index], songs[target]] = [songs[target], songs[index]]
+  if (target < 0 || target >= playlist.songs.length) return
+  const reordered = [...playlist.songs]
+  ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
+  playlist.songs = reordered
+  error.value = null
+  try {
+    await reorderSongs(screen.value, reordered.map(song => song.id))
+  } catch (e) {
+    error.value = apiErrorMessage(e, 'No se pudo guardar el orden')
+    await fetchAll()
+  }
 }
 
-function removeSong(index) {
-  playlist.value.songs.splice(index, 1)
+async function removeSong(song) {
+  if (!confirm(`¿Quitar "${song.title}" del comedor ${screenName.value}?`)) return
+  error.value = null
+  try {
+    await deleteSong(screen.value, song.id)
+    playlist.songs = playlist.songs.filter(s => s.id !== song.id)
+  } catch (e) {
+    error.value = apiErrorMessage(e, 'No se pudo quitar la canción')
+  }
 }
 
-function setSongsPerBreak(value) {
-  playlist.value.songsPerBreak = clampSongsPerBreak(value)
+async function setSongsPerBreak(value) {
+  const songsPerBreak = clampSongsPerBreak(value)
+  if (songsPerBreak === playlist.songsPerBreak) return
+  const previous = playlist.songsPerBreak
+  playlist.songsPerBreak = songsPerBreak
+  error.value = null
+  try {
+    await updateSongsPerBreak(screen.value, songsPerBreak)
+  } catch (e) {
+    playlist.songsPerBreak = previous
+    error.value = apiErrorMessage(e, 'No se pudo guardar el cambio')
+  }
 }
 
 async function copyLink() {
@@ -136,6 +227,7 @@ const uploadBlocker = computed(() => {
   if (upload.file.size > LOUNGE_MAX_UPLOAD_BYTES) return `El video pesa más de ${LOUNGE_MAX_UPLOAD_MB} MB`
   if (upload.metadata && upload.metadata.duration > LOUNGE_MAX_DURATION_SECONDS) return `El video dura más de ${LOUNGE_MAX_DURATION_SECONDS / 60} minutos`
   if (!upload.title.trim()) return 'Escribe un título'
+  if (!upload.screens.length) return 'Elige al menos un comedor'
   return null
 })
 
@@ -148,7 +240,7 @@ async function onFileSelected(event) {
 }
 
 function resetUpload() {
-  Object.assign(upload, { file: null, title: '', metadata: null, progress: null, error: null })
+  Object.assign(upload, { file: null, title: '', screens: [screen.value], metadata: null, progress: null, error: null })
   if (fileInput.value) fileInput.value.value = ''
 }
 
@@ -159,11 +251,11 @@ async function submitUpload() {
   upload.progress = 0
   try {
     await uploadScreenVideo(
-      { file: upload.file, title: upload.title.trim(), screens: [LOUNGE_SCREEN] },
+      { file: upload.file, title: upload.title.trim(), screens: upload.screens },
       p => { upload.progress = p },
     )
     resetUpload()
-    notice.value = 'Comunicado subido. Se está convirtiendo; cuando esté listo, revísalo en la vista previa y presiona Activar.'
+    notice.value = 'Comunicado subido.'
     await fetchAnnouncements()
   } catch (e) {
     upload.error = apiErrorMessage(e, 'No se pudo subir el comunicado')
@@ -180,6 +272,14 @@ async function patchAnnouncement(video, payload) {
     error.value = apiErrorMessage(e, 'No se pudo guardar el cambio')
     await fetchAnnouncements()
   }
+}
+
+function toggleAnnouncementScreen(video, key) {
+  const screens = video.screens.includes(key)
+    ? video.screens.filter(s => s !== key)
+    : [...video.screens, key]
+  if (!screens.length) { error.value = 'El comunicado debe quedar al menos en un comedor. Si no quieres mostrarlo, desactívalo.'; return }
+  patchAnnouncement(video, { screens })
 }
 
 function saveTitle(video, value) {
@@ -204,7 +304,7 @@ async function moveAnnouncement(index, delta) {
 }
 
 async function removeAnnouncement(video) {
-  if (!confirm(`Esto elimina "${video.title}" de forma definitiva y deja de mostrarse en el comedor. ¿Seguro?`)) return
+  if (!confirm(`Esto elimina "${video.title}" de forma definitiva y deja de mostrarse en los comedores. ¿Seguro?`)) return
   error.value = null
   try {
     await deleteScreenVideo(video.id)
@@ -215,10 +315,11 @@ async function removeAnnouncement(video) {
 }
 
 function announcementStatus(video) {
-  if (video.status === 'processing') return { color: '#B45309', text: '⏳ Convirtiendo… presiona Actualizar en un momento' }
-  if (video.status === 'failed') return { color: '#B91C1C', text: `❌ ${video.error_message || 'Falló la conversión'}` }
-  if (!video.is_active) return { color: '#1D4ED8', text: '👀 Listo para revisar: míralo en la vista previa y presiona Activar' }
-  return { color: '#15803D', text: '🟢 En rotación en el comedor' }
+  if (video.status === 'processing') return { color: '#B45309', text: 'Convirtiendo…' }
+  if (video.status === 'failed') return { color: '#B91C1C', text: video.error_message || 'Falló la conversión' }
+  if (!video.is_active) return { color: '#1D4ED8', text: 'Inactivo' }
+  const names = LOUNGE_SCREENS.filter(s => video.screens.includes(s.key)).map(s => s.name)
+  return { color: '#15803D', text: `Activo en ${names.join(', ')}` }
 }
 
 function formatDuration(seconds) {
@@ -243,9 +344,8 @@ function formatSize(bytes) {
           ← Módulos
         </button>
         <span style="font-weight:700;padding:4px 12px;border-radius:8px;color:#0E7490;background:#CFFAFE;font-size:1.2rem;line-height:1.2;">
-          📺 Pantalla Comedor
+          Pantalla Comedor
         </span>
-        <span class="badge badge-warning badge-sm">Prueba</span>
       </div>
       <div class="navbar-end">
         <div class="dropdown dropdown-end">
@@ -264,56 +364,59 @@ function formatSize(bytes) {
 
     <div class="p-4" style="max-width:1100px;margin:0 auto;">
 
-      <div class="alert alert-info text-sm mb-4">
-        <span>
-          Versión de prueba: los <b>comunicados</b> se guardan en el sistema; las <b>canciones</b> se guardan solo en
-          este navegador y viajan dentro del link de la TV. Si cambias algo, recarga la TV (o abre el link nuevo si
-          cambiaste canciones).
-        </span>
-      </div>
-
       <div v-if="error" role="alert" class="alert alert-error mb-3 text-sm">
         <span>{{ error }}</span>
         <button class="btn btn-ghost btn-xs ml-auto" @click="error = null">✕</button>
       </div>
 
+      <!-- Pantalla -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <button v-for="s in LOUNGE_SCREENS" :key="s.key" class="btn btn-sm"
+                :class="s.key === screen ? 'btn-primary' : 'btn-outline'" @click="switchScreen(s.key)">
+          Comedor {{ s.name }} ({{ s.site }})
+        </button>
+      </div>
+
       <!-- Agregar -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-bottom:16px;">
         <div class="bg-white" style="padding:14px 16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-          <h4 style="font-weight:800;margin:0 0 10px;">🎵 Agregar canción (YouTube)</h4>
+          <h4 style="font-weight:800;margin:0 0 10px;">Agregar canción a {{ screenName }}</h4>
           <label style="display:block;margin-bottom:8px;">
             <span style="font-size:0.78rem;color:#666;display:block;margin-bottom:2px;">Link del video</span>
             <input v-model="youtubeForm.link" type="text" placeholder="https://www.youtube.com/watch?v=…"
                    class="input input-bordered input-sm w-full" @keyup.enter="addYoutube" />
           </label>
           <label style="display:block;margin-bottom:8px;">
-            <span style="font-size:0.78rem;color:#666;display:block;margin-bottom:2px;">Título (solo para identificarlo)</span>
+            <span style="font-size:0.78rem;color:#666;display:block;margin-bottom:2px;">Título</span>
             <input v-model="youtubeForm.title" type="text" maxlength="120" class="input input-bordered input-sm w-full"
                    @keyup.enter="addYoutube" />
           </label>
-          <button class="btn btn-sm btn-success text-white" :disabled="!youtubeForm.link.trim()" @click="addYoutube">＋ Agregar</button>
+          <button class="btn btn-sm btn-success text-white" :disabled="!youtubeForm.link.trim() || youtubeForm.saving" @click="addYoutube">Agregar</button>
           <div v-if="youtubeForm.error" style="margin-top:8px;font-size:0.8rem;color:#B91C1C;">{{ youtubeForm.error }}</div>
-          <p style="margin:8px 0 0;font-size:0.78rem;color:#888;">
-            Algunos videos musicales no permiten reproducirse fuera de YouTube; revisa la vista previa. Si dice
-            "Video no disponible", la TV lo va a saltar.
-          </p>
         </div>
 
         <div class="bg-white" style="padding:14px 16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-          <h4 style="font-weight:800;margin:0 0 10px;">📢 Subir comunicado</h4>
+          <h4 style="font-weight:800;margin:0 0 10px;">Subir comunicado</h4>
           <label style="display:block;margin-bottom:8px;">
             <span style="font-size:0.78rem;color:#666;display:block;margin-bottom:2px;">Archivo de video</span>
             <input ref="fileInput" type="file" accept="video/*" class="file-input file-input-bordered file-input-sm w-full"
                    :disabled="upload.progress !== null" @change="onFileSelected" />
           </label>
           <label style="display:block;margin-bottom:8px;">
-            <span style="font-size:0.78rem;color:#666;display:block;margin-bottom:2px;">Título (solo para identificarlo)</span>
+            <span style="font-size:0.78rem;color:#666;display:block;margin-bottom:2px;">Título</span>
             <input v-model="upload.title" type="text" maxlength="120" class="input input-bordered input-sm w-full"
                    :disabled="upload.progress !== null" />
           </label>
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:0.86rem;">
+            <span style="font-size:0.78rem;color:#666;">Comedores:</span>
+            <label v-for="s in LOUNGE_SCREENS" :key="s.key" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" :value="s.key" v-model="upload.screens" :disabled="upload.progress !== null" />
+              {{ s.name }}
+            </label>
+          </div>
           <button class="btn btn-sm btn-success text-white" :disabled="!!uploadBlocker || upload.progress !== null" @click="submitUpload">
             <span v-if="upload.progress !== null" class="loading loading-spinner loading-xs"></span>
-            ⬆ Subir
+            Subir
           </button>
 
           <div v-if="upload.file" style="margin-top:8px;font-size:0.8rem;color:#666;">
@@ -328,10 +431,6 @@ function formatSize(bytes) {
             <div style="font-size:0.78rem;color:#666;">{{ upload.progress < 100 ? `Subiendo… ${upload.progress}%` : 'Guardando…' }}</div>
           </div>
           <div v-if="upload.error" style="margin-top:8px;font-size:0.8rem;color:#B91C1C;">{{ upload.error }}</div>
-          <p style="margin:8px 0 0;font-size:0.78rem;color:#888;">
-            Hasta {{ LOUNGE_MAX_DURATION_SECONDS / 60 }} minutos y {{ LOUNGE_MAX_UPLOAD_MB }} MB. Sube el video tal cual;
-            el sistema lo convierte para la TV.
-          </p>
         </div>
       </div>
 
@@ -342,46 +441,42 @@ function formatSize(bytes) {
 
       <!-- Link para la TV -->
       <div class="bg-white" style="padding:14px 16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:16px;">
-        <h4 style="font-weight:800;margin:0 0 8px;">📺 Link para abrir en la TV</h4>
+        <h4 style="font-weight:800;margin:0 0 8px;">Link para abrir en la TV de {{ screenName }}</h4>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <input :value="screenLink" readonly class="input input-bordered input-sm" style="flex:1;min-width:260px;font-family:monospace;font-size:0.78rem;"
                  @focus="$event.target.select()" />
-          <button class="btn btn-sm" @click="copyLink">{{ copied ? '✅ Copiado' : '📋 Copiar' }}</button>
-          <a class="btn btn-sm btn-primary" :href="screenLink" target="_blank" rel="noopener">↗ Abrir</a>
+          <button class="btn btn-sm" @click="copyLink">{{ copied ? 'Copiado' : 'Copiar' }}</button>
+          <a class="btn btn-sm btn-primary" :href="screenLink" target="_blank" rel="noopener">Abrir</a>
         </div>
       </div>
 
       <!-- Cómo se reproduce -->
       <div class="bg-white" style="padding:14px 16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:16px;">
-        <h4 style="font-weight:800;margin:0 0 8px;">🔁 Cómo se reproduce</h4>
-        <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:0.9rem;">
+        <h4 style="font-weight:800;margin:0 0 8px;">Cómo se reproduce en {{ screenName }}</h4>
+        <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:0.9rem;margin-bottom:10px;">
           Poner un comunicado cada
-          <input :value="playlist.songsPerBreak" type="number" min="1" max="20" class="input input-bordered input-sm" style="width:70px;"
+          <input :value="playlist.songsPerBreak" type="number" :min="MIN_SONGS_PER_BREAK" :max="MAX_SONGS_PER_BREAK" class="input input-bordered input-sm" style="width:70px;"
                  @change="setSongsPerBreak($event.target.value); $event.target.value = playlist.songsPerBreak" />
           canciones.
         </label>
-        <p style="margin:6px 0 10px;font-size:0.78rem;color:#888;">
-          Cada lista sigue donde se quedó: después del comunicado vienen las siguientes canciones, y el siguiente
-          descanso pone el siguiente comunicado activo. Al terminar una lista vuelve a empezar.
-        </p>
         <div v-if="sequencePreview.length" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:0.8rem;">
           <span v-for="(item, i) in sequencePreview" :key="i"
                 :style="`padding:2px 8px;border-radius:999px;${item.type === 'youtube' ? 'background:#FEE2E2;color:#991B1B;' : 'background:#DBEAFE;color:#1E40AF;font-weight:700;'}`">
-            {{ item.type === 'youtube' ? '🎵' : '📢' }} {{ item.title }}
+            {{ item.title }}
           </span>
           <span style="color:#888;">…</span>
         </div>
-        <div v-else style="font-size:0.85rem;color:#999;">Agrega canciones o activa comunicados para ver el orden.</div>
+        <div v-else style="font-size:0.85rem;color:#999;">Sin elementos.</div>
       </div>
 
       <!-- Canciones -->
-      <h3 style="font-weight:900;margin:0 0 10px;font-size:1.15rem;">🎵 Canciones ({{ playlist.songs.length }})</h3>
+      <h3 style="font-weight:900;margin:0 0 10px;font-size:1.15rem;">Canciones de {{ screenName }} ({{ playlist.songs.length }})</h3>
 
       <div v-if="!playlist.songs.length" class="bg-white" style="padding:18px;border-radius:10px;text-align:center;color:#999;margin-bottom:18px;">
-        Sin canciones: la TV solo rotará los comunicados.
+        Sin canciones.
       </div>
 
-      <div v-for="(song, index) in playlist.songs" :key="song.key" class="bg-white"
+      <div v-for="(song, index) in playlist.songs" :key="song.id" class="bg-white"
            style="display:flex;gap:14px;flex-wrap:wrap;padding:12px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:10px;">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:34px;">
           <button class="btn btn-xs" :disabled="index === 0" title="Subir en el orden" @click="moveSong(index, -1)">▲</button>
@@ -395,28 +490,29 @@ function formatSize(bytes) {
                   style="width:100%;height:100%;border:0;"></iframe>
         </div>
         <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px;justify-content:center;">
-          <input v-model="song.title" type="text" maxlength="120" class="input input-bordered input-sm w-full" style="font-weight:700;" />
+          <input :value="song.title" type="text" maxlength="120" class="input input-bordered input-sm w-full" style="font-weight:700;"
+                 @blur="saveSongTitle(song, $event.target.value)" @keyup.enter="$event.target.blur()" />
           <div><span class="badge badge-error badge-sm text-white">YouTube</span></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;justify-content:center;min-width:110px;">
-          <button class="btn btn-xs btn-error text-white" @click="removeSong(index)">🗑 Quitar</button>
+          <button class="btn btn-xs btn-error text-white" @click="removeSong(song)">Quitar</button>
         </div>
       </div>
 
       <!-- Comunicados -->
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 10px;">
-        <h3 style="font-weight:900;margin:0;font-size:1.15rem;">📢 Comunicados ({{ announcements.length }})</h3>
+        <h3 style="font-weight:900;margin:0;font-size:1.15rem;">Comunicados ({{ announcements.length }})</h3>
         <button class="btn btn-sm" :disabled="loading" @click="fetchAnnouncements">
           <span v-if="loading" class="loading loading-spinner loading-xs"></span>
-          <span v-else>🔄</span> Actualizar
+          Actualizar
         </button>
         <span v-if="hasProcessing" style="font-size:0.8rem;color:#B45309;">
-          Hay comunicados convirtiéndose. Presiona <b>Actualizar</b> en un momento para ver si ya están listos.
+          Convirtiendo…
         </span>
       </div>
 
       <div v-if="!announcements.length" class="bg-white" style="padding:18px;border-radius:10px;text-align:center;color:#999;">
-        {{ loading ? 'Cargando…' : 'Sin comunicados: la TV solo pondrá canciones.' }}
+        {{ loading ? 'Cargando…' : 'Sin comunicados.' }}
       </div>
 
       <div v-for="(video, index) in announcements" :key="video.id" class="bg-white"
@@ -428,24 +524,30 @@ function formatSize(bytes) {
         </div>
         <div style="width:240px;aspect-ratio:16/9;background:#111;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:0.8rem;">
           <video v-if="video.public_url" :src="video.public_url" controls preload="metadata" style="width:100%;height:100%;object-fit:contain;"></video>
-          <span v-else-if="video.status === 'processing'">⏳ Convirtiendo…</span>
+          <span v-else-if="video.status === 'processing'">Convirtiendo…</span>
           <span v-else>Sin video</span>
         </div>
         <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px;justify-content:center;">
           <input :value="video.title" type="text" maxlength="120" class="input input-bordered input-sm w-full" style="font-weight:700;"
                  @blur="saveTitle(video, $event.target.value)" @keyup.enter="$event.target.blur()" />
           <div :style="`font-size:0.8rem;font-weight:700;color:${announcementStatus(video).color};`">{{ announcementStatus(video).text }}</div>
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:0.86rem;">
+            <label v-for="s in LOUNGE_SCREENS" :key="s.key" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" :checked="video.screens.includes(s.key)" @change="toggleAnnouncementScreen(video, s.key)" />
+              {{ s.name }}
+            </label>
+          </div>
           <div style="font-size:0.8rem;color:#666;">
             {{ formatDuration(video.duration_seconds) }} · {{ formatSize(video.size_bytes) }}
             <span v-if="video.is_vertical" style="color:#B45309;">· Vertical (fondo difuminado)</span>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;justify-content:center;min-width:110px;">
-          <button v-if="video.is_active" class="btn btn-xs btn-warning" @click="patchAnnouncement(video, { is_active: false })">⏸ Desactivar</button>
+          <button v-if="video.is_active" class="btn btn-xs btn-warning" @click="patchAnnouncement(video, { is_active: false })">Desactivar</button>
           <button v-else class="btn btn-xs btn-success text-white" :disabled="video.status !== 'ready'"
                   :title="video.status !== 'ready' ? 'Espera a que termine de convertirse para revisarlo' : ''"
-                  @click="patchAnnouncement(video, { is_active: true })">▶ Activar</button>
-          <button class="btn btn-xs btn-error text-white" @click="removeAnnouncement(video)">🗑 Eliminar</button>
+                  @click="patchAnnouncement(video, { is_active: true })">Activar</button>
+          <button class="btn btn-xs btn-error text-white" @click="removeAnnouncement(video)">Eliminar</button>
         </div>
       </div>
     </div>

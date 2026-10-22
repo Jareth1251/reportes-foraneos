@@ -1,25 +1,28 @@
 <script setup>
-// Lo que se ve en la TV del comedor: canciones de YouTube con un comunicado
-// (MP4) cada N canciones, en el orden de createRotation. Las canciones llegan
-// en ?p= (las arma el gestor "Pantalla Comedor") y los comunicados activos se
-// piden a API-Base al abrir la página. Sin polling: para ver cambios se
-// recarga la página.
+// Lo que se ve en la TV de un comedor (/tv/cdmx-comedor, /tv/monterrey-comedor): canciones de YouTube con un comunicado
+// (MP4) cada N canciones, en el orden de createRotation. La playlist se pide
+// a API-Base al abrir y se vuelve a pedir cuando Ably avisa de un cambio
+// (sin polling). Lo que está sonando nunca se corta: la lista nueva aplica
+// desde el siguiente elemento.
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { decodePlaylist, createRotation, fetchAnnouncements } from '@/services/loungeScreen'
+import { createRotation, fetchPlaylist, subscribeToLoungeUpdates } from '@/services/loungeScreen'
 
 // YouTube puede meter un anuncio antes del video: se le da más margen para arrancar.
 const VIDEO_START_TIMEOUT_MS   = 15000
 const YOUTUBE_START_TIMEOUT_MS = 45000
 const STALL_TIMEOUT_MS         = 20000
-// Si todos los elementos fallan seguidos (sin internet), se espera antes de reintentar.
-const ALL_FAILED_RETRY_MS      = 30000
+// Si todos los elementos fallan seguidos (sin internet) o API-Base no responde
+// al arrancar, se espera antes de reintentar.
+const RETRY_MS                 = 30000
 
-const route = useRoute()
-const playlist = decodePlaylist(route.query.p)
+const screen = useRoute().params.screen
 
-let nextItem   = null
+let rotation   = null
 let totalItems = 0
+let unsubscribe = null
+let refreshing = false
+let refreshAgain = false
 
 const loaded        = ref(false)
 const isEmpty       = ref(false)
@@ -54,7 +57,10 @@ function markPlaying() {
 }
 
 function playNext() {
-  current.value = nextItem()
+  const item = rotation?.next() ?? null
+  current.value = item
+  isEmpty.value = !item
+  if (!item) { stopAll(); return }
   playCurrent()
 }
 
@@ -64,7 +70,7 @@ function skipFailed() {
   if (failuresInARow >= totalItems) {
     failuresInARow = 0
     stopAll()
-    retryTimer = setTimeout(() => { retryTimer = null; playNext() }, ALL_FAILED_RETRY_MS)
+    retryTimer = setTimeout(() => { retryTimer = null; playNext() }, RETRY_MS)
     return
   }
   playNext()
@@ -194,19 +200,39 @@ function unlockSound() {
   try { ytPlayer?.unMute(); ytPlayer?.setVolume(100) } catch { /* aún no listo */ }
 }
 
-async function start() {
-  let announcements = []
-  try {
-    announcements = await fetchAnnouncements()
-  } catch (e) {
-    // Sin API-Base la TV sigue con las canciones.
-    console.warn('[Comedor] no se pudieron cargar los comunicados', e)
-  }
-  totalItems = playlist.songs.length + announcements.length
-  nextItem = createRotation(playlist, announcements)
+function applyPlaylist(playlist) {
+  totalItems = playlist.songs.length + playlist.announcements.length
+  if (rotation) rotation.update(playlist)
+  else rotation = createRotation(playlist)
   loaded.value = true
-  isEmpty.value = totalItems === 0
-  if (totalItems) playNext()
+  // Si estaba sin nada que reproducir, arranca ya; si no, aplica al terminar lo actual.
+  if (!current.value && !retryTimer) playNext()
+}
+
+async function start() {
+  try {
+    applyPlaylist(await fetchPlaylist(screen))
+  } catch (e) {
+    console.warn('[Comedor] no se pudo cargar la playlist; reintentando', e)
+    retryTimer = setTimeout(() => { retryTimer = null; start() }, RETRY_MS)
+    return
+  }
+  unsubscribe = subscribeToLoungeUpdates(screen, refresh)
+}
+
+// Varios avisos seguidos (p. ej. reordenar) se juntan en una sola petición extra.
+async function refresh() {
+  if (refreshing) { refreshAgain = true; return }
+  refreshing = true
+  try {
+    applyPlaylist(await fetchPlaylist(screen))
+  } catch (e) {
+    // Se queda con la lista que tenía.
+    console.warn('[Comedor] no se pudo actualizar la playlist', e)
+  } finally {
+    refreshing = false
+    if (refreshAgain) { refreshAgain = false; refresh() }
+  }
 }
 
 onMounted(() => {
@@ -220,6 +246,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', unlockSound)
   clearWatchdog()
   if (retryTimer) clearTimeout(retryTimer)
+  unsubscribe?.()
   try { ytPlayer?.destroy() } catch { /* nada */ }
 })
 </script>
@@ -228,7 +255,7 @@ onBeforeUnmount(() => {
   <div class="tv">
     <div v-if="loaded && isEmpty" class="tv-empty">
       Sin canciones ni comunicados activos.<br />
-      Abre el link que genera el módulo "Pantalla Comedor".
+      Agrégalos en el módulo "Pantalla Comedor"; aparecerán aquí solos.
     </div>
 
     <video v-show="current?.type === 'video'" ref="videoEl" class="tv-layer" playsinline preload="auto"
