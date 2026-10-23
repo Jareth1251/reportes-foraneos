@@ -135,12 +135,6 @@ const router = createRouter({
       beforeEnter: guardModuleRoute('pantalla-comedor'),
     },
     {
-      // Lo que abre la TV de cada comedor: público, sin login (ver LOUNGE_SCREENS).
-      path: '/tv/:screen(cdmx-comedor|monterrey-comedor)',
-      name: 'tv-comedor',
-      component: () => import('@/views/LoungeScreenPlayerView.vue'),
-    },
-    {
       path: '/agentes-almacen',
       name: 'agentes-almacen',
       component: () => import('@/views/WarehouseAgentsView.vue'),

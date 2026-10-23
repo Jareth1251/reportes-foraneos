@@ -1,4 +1,3 @@
-import Ably from 'ably'
 import { api } from '@/config/axios'
 
 // Pantallas de los comedores: canciones de YouTube con un comunicado cada N
@@ -7,14 +6,16 @@ import { api } from '@/config/axios'
 // de cada pantalla en lounge_songs / lounge_screens; los comunicados son
 // ScreenVideo de esas pantallas (se suben, convierten y activan desde este
 // módulo, y uno puede ir a los dos comedores).
-// Cada TV (/tv/{pantalla}) pide su playlist al abrir y se entera de cambios por Ably.
+// Las TVs no viven aquí: son pantallas de point-of-sale-back, como las de
+// turnos (views/pantallas/comedor.pug + public/javascripts/lounge-screen.js),
+// que piden su lista a API-Base y se enteran de cambios por Ably.
 
-// Las claves deben coincidir con ScreenVideo::LOUNGE_SCREENS de API-Base.
+// Las claves deben coincidir con ScreenVideo::LOUNGE_SCREENS de API-Base; path,
+// con las rutas de app.js de point-of-sale-back.
 export const LOUNGE_SCREENS = [
-  { key: 'cdmx-comedor',      name: 'CDMX',      site: '3100' },
-  { key: 'monterrey-comedor', name: 'Monterrey', site: '3000' },
+  { key: 'cdmx-comedor',      name: 'CDMX',      site: '3100', path: '/pantallas/cdmx/comedor' },
+  { key: 'monterrey-comedor', name: 'Monterrey', site: '3000', path: '/pantallas/monterrey/comedor' },
 ]
-export const LOUNGE_SCREEN_KEYS = LOUNGE_SCREENS.map(s => s.key)
 // Deben coincidir con ScreenVideo::MAX_UPLOAD_KB / MAX_DURATION_SECONDS (grupo lounge).
 export const LOUNGE_MAX_UPLOAD_MB = 250
 export const LOUNGE_MAX_UPLOAD_BYTES = LOUNGE_MAX_UPLOAD_MB * 1024 * 1024
@@ -56,53 +57,16 @@ export async function deleteSong(screen, id) {
   await api.delete(`${base(screen)}/songs/${id}`)
 }
 
-// ── TV (pública) ───────────────────────────────────────────────────────────
-/** Canciones, configuración y comunicados activos, listos para createRotation. */
-export async function fetchPlaylist(screen) {
-  const { data } = await api.get(`${base(screen)}/playlist`)
-  return {
-    songsPerBreak: clampSongsPerBreak(data?.songs_per_break),
-    songs: (data?.songs ?? []).map(toSongItem),
-    announcements: (data?.announcements ?? [])
-      .filter(v => v.url)
-      .map(v => ({ type: 'video', url: v.url, title: v.title })),
-  }
-}
-
 export function toSongItem(song) {
   return { type: 'youtube', videoId: song.youtube_id, title: song.title }
 }
 
-/**
- * Avisa cuando cambian canciones/configuración (lounge-updates) o comunicados
- * (screen-videos-updates). Token público de solo-suscripción de API-Base.
- * Regresa una función para desconectarse.
- */
-export function subscribeToLoungeUpdates(screen, onUpdate) {
-  const ably = new Ably.Realtime({
-    authCallback: async (tokenParams, callback) => {
-      try {
-        const { data } = await api.get('/lounge/ably-token')
-        callback(null, data)
-      } catch (error) {
-        callback(error, null)
-      }
-    },
-  })
-
-  const loungeChannel = ably.channels.get('lounge-updates')
-  const videosChannel = ably.channels.get('screen-videos-updates')
-  loungeChannel.subscribe('update', message => {
-    if (message.data?.screen === screen) onUpdate()
-  })
-  // Llega por cualquier video (también los de turnos): pedir de más no estorba.
-  videosChannel.subscribe('update', () => onUpdate())
-
-  return () => ably.close()
-}
+// Donde se sirven las pantallas de turnos (point-of-sale-back).
+const SCREENS_BASE_URL = (import.meta.env.VITE_SCREENS_URL || 'http://pos.miplayera.com.mx:3001').replace(/\/$/, '')
 
 export function buildScreenLink(screen) {
-  return `${window.location.origin}/tv/${screen}`
+  const path = LOUNGE_SCREENS.find(s => s.key === screen)?.path ?? ''
+  return `${SCREENS_BASE_URL}${path}`
 }
 
 // ── Utilidades ─────────────────────────────────────────────────────────────
@@ -137,39 +101,28 @@ export function clampSongsPerBreak(value) {
  * un comunicado, las N siguientes canciones, el siguiente comunicado… Cada
  * lista sigue donde se quedó y vuelve a empezar al terminarse.
  * Sin canciones, solo rota comunicados; sin comunicados, solo canciones.
- *
- * update() cambia las listas sin reiniciar el recorrido (lo usa la TV cuando
- * llega un aviso de Ably): sigue más o menos donde iba.
+ * La TV usa una copia de esta lógica en lounge-screen.js de point-of-sale-back:
+ * si cambia aquí, cambia allá (la vista previa del gestor debe coincidir).
  */
-export function createRotation(playlist) {
-  let songs = playlist.songs
-  let announcements = playlist.announcements
-  let songsPerBreak = clampSongsPerBreak(playlist.songsPerBreak)
+export function createRotation({ songs, announcements, songsPerBreak: perBreak }) {
+  const songsPerBreak = clampSongsPerBreak(perBreak)
   let songIndex = 0
   let announcementIndex = 0
   let songsSinceBreak = 0
 
   function next() {
     if (announcements.length && (songsSinceBreak >= songsPerBreak || !songs.length)) {
-      const item = announcements[announcementIndex % announcements.length]
+      const item = announcements[announcementIndex]
       announcementIndex = (announcementIndex + 1) % announcements.length
       songsSinceBreak = 0
       return item
     }
     if (!songs.length) return null
-    const item = songs[songIndex % songs.length]
+    const item = songs[songIndex]
     songIndex = (songIndex + 1) % songs.length
     songsSinceBreak++
     return item
   }
 
-  function update(newPlaylist) {
-    songs = newPlaylist.songs
-    announcements = newPlaylist.announcements
-    songsPerBreak = clampSongsPerBreak(newPlaylist.songsPerBreak)
-    songIndex = songs.length ? songIndex % songs.length : 0
-    announcementIndex = announcements.length ? announcementIndex % announcements.length : 0
-  }
-
-  return { next, update, isEmpty: () => !songs.length && !announcements.length }
+  return { next }
 }
