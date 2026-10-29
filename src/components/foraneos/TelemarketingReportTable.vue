@@ -57,9 +57,11 @@ const summary = computed(() => {
     total: list.length,
     facturados: list.filter((r) => r.facturado).length,
     entregados: list.filter((r) => r.entregado).length,
-    sin_facturar: list.filter((r) => !r.facturado).length,
+    sin_facturar: list.filter((r) => !r.facturado && !r.consolidated_into).length,
+    consolidados: list.filter((r) => r.consolidated_into).length,
     en_flujo_foraneo: list.filter((r) => r.in_remote_orders).length,
-    subtotal: list.reduce((n, r) => n + (Number(r.subtotal) || 0), 0),
+    // Los consolidados ya van dentro del monto de su PC; sumarlos lo duplicaría.
+    subtotal: list.reduce((n, r) => (r.consolidated_into ? n : n + (Number(r.subtotal) || 0)), 0),
   }
 })
 
@@ -69,6 +71,7 @@ function formatMoney(v) {
 }
 
 function estadoClass(estado) {
+  if (String(estado || '').startsWith('Consolidado')) return 'text-base-content/50 italic'
   switch (estado) {
     case 'Entregado': return 'text-green-700 font-semibold'
     case 'Facturado': return 'text-blue-700'
@@ -127,6 +130,7 @@ function exportReport() {
       <span class="text-blue-700"><b>{{ summary.facturados }}</b> facturados</span>
       <span class="text-green-700"><b>{{ summary.entregados }}</b> entregados</span>
       <span class="text-base-content/60"><b>{{ summary.sin_facturar }}</b> sin facturar</span>
+      <span v-if="summary.consolidados" class="text-base-content/50 italic"><b>{{ summary.consolidados }}</b> consolidados en PC</span>
       <span class="text-base-content/50">{{ summary.en_flujo_foraneo }} en flujo foráneo</span>
       <span><b>{{ formatMoney(summary.subtotal) }}</b> sin IVA</span>
     </div>
@@ -161,7 +165,11 @@ function exportReport() {
               <td class="tabular-nums whitespace-nowrap">{{ r.erp_order_id || '—' }}</td>
               <td class="whitespace-nowrap">{{ r.agente || '—' }}</td>
               <td class="whitespace-nowrap" :class="estadoClass(r.estado)">{{ r.estado }}</td>
-              <td class="tabular-nums whitespace-nowrap text-right">{{ formatMoney(r.subtotal) }}</td>
+              <td
+                class="tabular-nums whitespace-nowrap text-right"
+                :class="r.consolidated_into ? 'line-through text-base-content/40' : ''"
+                :title="r.consolidated_into ? `Ya incluido en ${r.consolidated_into}` : ''"
+              >{{ formatMoney(r.subtotal) }}</td>
               <td class="tabular-nums whitespace-nowrap">{{ r.invoice_id || '—' }}</td>
               <td class="whitespace-nowrap">{{ r.carrier || '—' }}</td>
               <td class="tabular-nums whitespace-nowrap">{{ r.fecha || '—' }}</td>
