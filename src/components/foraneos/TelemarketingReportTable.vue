@@ -59,8 +59,14 @@ const summary = computed(() => {
     entregados: list.filter((r) => r.entregado).length,
     sin_facturar: list.filter((r) => !r.facturado).length,
     en_flujo_foraneo: list.filter((r) => r.in_remote_orders).length,
+    subtotal: list.reduce((n, r) => n + (Number(r.subtotal) || 0), 0),
   }
 })
+
+const moneyFmt = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
+function formatMoney(v) {
+  return v == null || v === '' ? '—' : moneyFmt.format(Number(v) || 0)
+}
 
 function estadoClass(estado) {
   switch (estado) {
@@ -79,6 +85,7 @@ const EXPORT_FIELDS = {
   erp_order_id: 'Pedido',
   agente: 'Agente Telemarketing',
   estado: 'Estado',
+  subtotal: 'Monto sin IVA',
   invoice_id: 'Factura',
   carrier: 'Paquetería',
   fecha: 'Fecha',
@@ -89,6 +96,7 @@ function exportReport() {
     ...r,
     invoice_id: r.invoice_id || '',
     carrier: r.carrier || '',
+    subtotal: r.subtotal ?? '',
   }))
   exportToExcel(data, EXPORT_FIELDS, `ReporteTelemarketing_${props.dateStart}_a_${props.dateEnd}.xlsx`)
 }
@@ -120,6 +128,7 @@ function exportReport() {
       <span class="text-green-700"><b>{{ summary.entregados }}</b> entregados</span>
       <span class="text-base-content/60"><b>{{ summary.sin_facturar }}</b> sin facturar</span>
       <span class="text-base-content/50">{{ summary.en_flujo_foraneo }} en flujo foráneo</span>
+      <span><b>{{ formatMoney(summary.subtotal) }}</b> sin IVA</span>
     </div>
 
     <div v-if="agentsFailed.length" class="mb-3 text-xs text-amber-600">
@@ -140,18 +149,19 @@ function exportReport() {
           <thead class="sticky top-0 bg-base-200 z-10 text-sm font-bold">
             <tr>
               <th>Cliente</th><th>Pedido</th><th>Agente Telemarketing</th>
-              <th>Estado</th><th>Factura</th><th>Paquetería</th><th>Fecha</th>
+              <th>Estado</th><th class="text-right">Monto sin IVA</th><th>Factura</th><th>Paquetería</th><th>Fecha</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="filteredRows.length === 0">
-              <td colspan="7" class="text-center text-base-content/40">Sin registros.</td>
+              <td colspan="8" class="text-center text-base-content/40">Sin registros.</td>
             </tr>
             <tr v-for="r in filteredRows" :key="r.erp_order_id" class="text-sm">
               <td>{{ r.customer_name || '—' }}</td>
               <td class="tabular-nums whitespace-nowrap">{{ r.erp_order_id || '—' }}</td>
               <td class="whitespace-nowrap">{{ r.agente || '—' }}</td>
               <td class="whitespace-nowrap" :class="estadoClass(r.estado)">{{ r.estado }}</td>
+              <td class="tabular-nums whitespace-nowrap text-right">{{ formatMoney(r.subtotal) }}</td>
               <td class="tabular-nums whitespace-nowrap">{{ r.invoice_id || '—' }}</td>
               <td class="whitespace-nowrap">{{ r.carrier || '—' }}</td>
               <td class="tabular-nums whitespace-nowrap">{{ r.fecha || '—' }}</td>
