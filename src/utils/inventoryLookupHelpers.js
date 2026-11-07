@@ -25,6 +25,15 @@ export function shortName(fullName) {
   return parts.length >= 2 ? `${parts[0]} ${parts[1]}` : parts[0] || ''
 }
 
+export function fmtMoney(n) {
+  return Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+}
+
+// Monto del ajuste a costo: con signo para sumar, la vista muestra el absoluto.
+export function histAmount(h) {
+  return h.difference != null && h.unit_cost != null ? toInt(h.difference) * Number(h.unit_cost) : null
+}
+
 export function pillClass(n) {
   if (n > 0) return 'MIL-pillPos'
   if (n < 0) return 'MIL-pillNeg'

@@ -1,5 +1,6 @@
 <script setup>
-import { fmtDate, shortName, toInt, pillClass } from '@/utils/inventoryLookupHelpers'
+import { computed } from 'vue'
+import { fmtDate, fmtMoney, histAmount, shortName, toInt } from '@/utils/inventoryLookupHelpers'
 
 const props = defineProps({
   site: { type: String, required: true },
@@ -10,6 +11,22 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:site', 'update:hist-date', 'refresh', 'export'])
+
+const totals = computed(() => {
+  let rct = 0
+  let iss = 0
+  let missingCost = 0
+  for (const h of props.histRows) {
+    const amount = histAmount(h)
+    if (amount == null) { if (toInt(h.difference)) missingCost++; continue }
+    if (amount > 0) rct += amount
+    else iss -= amount
+  }
+  return { rct, iss, net: rct - iss, missingCost }
+})
+
+const diffBadge = (d) => (d < 0 ? 'badge-error badge-outline' : d > 0 ? 'badge-success badge-outline' : 'badge-ghost')
+const movementLabel = (d) => (d < 0 ? 'Salida' : d > 0 ? 'Entrada' : 'Sin diferencia')
 </script>
 
 <template>
@@ -42,6 +59,14 @@ const emit = defineEmits(['update:site', 'update:hist-date', 'refresh', 'export'
         ↓ Excel
       </button>
       <span class="text-xs text-base-content/50">{{ props.histRows.length }} registros</span>
+      <div v-if="props.histRows.length" class="ml-auto flex items-center gap-2 text-sm">
+        <span class="badge badge-success badge-outline font-bold">Entradas {{ fmtMoney(totals.rct) }}</span>
+        <span class="badge badge-error badge-outline font-bold">Salidas {{ fmtMoney(totals.iss) }}</span>
+        <span class="badge font-bold" :class="totals.net < 0 ? 'badge-error' : totals.net > 0 ? 'badge-success' : 'badge-ghost'">
+          Neto {{ fmtMoney(Math.abs(totals.net)) }}
+        </span>
+        <span v-if="totals.missingCost" class="text-xs text-base-content/50">{{ totals.missingCost }} sin costo</span>
+      </div>
     </div>
 
     <div v-if="props.histError" class="px-4 py-2 bg-red-500/10 border-b border-red-500/25 text-red-800 font-bold text-sm">
@@ -62,13 +87,15 @@ const emit = defineEmits(['update:site', 'update:hist-date', 'refresh', 'export'
             <th class="text-right">QAD antes</th>
             <th class="text-right">Diferencia</th>
             <th class="text-right">QAD final</th>
+            <th class="text-right">Costo u.</th>
+            <th class="text-right">Monto</th>
             <th>Usuario</th>
             <th>Estado</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="!props.histRows.length">
-            <td colspan="12" class="text-center text-base-content/40 py-5">
+            <td colspan="14" class="text-center text-base-content/40 py-5">
               {{ props.histLoading ? 'Cargando…' : 'Sin registros para esta fecha.' }}
             </td>
           </tr>
@@ -85,11 +112,24 @@ const emit = defineEmits(['update:site', 'update:hist-date', 'refresh', 'export'
               <span v-else class="text-base-content/40">—</span>
             </td>
             <td class="text-right">
-              <span v-if="h.difference != null" class="badge" :class="pillClass(toInt(h.difference))">{{ toInt(h.difference) }}</span>
+              <span
+                v-if="h.difference != null"
+                class="badge"
+                :class="diffBadge(toInt(h.difference))"
+                :title="movementLabel(toInt(h.difference))"
+              >{{ Math.abs(toInt(h.difference)) }}</span>
               <span v-else class="text-base-content/40">—</span>
             </td>
             <td class="text-right">
               <span v-if="String(h.api_status || '').toUpperCase() === 'OK'" class="badge badge-success">{{ toInt(h.counted_qty) }}</span>
+              <span v-else class="text-base-content/40">—</span>
+            </td>
+            <td class="text-right whitespace-nowrap">
+              <span v-if="h.unit_cost != null">{{ fmtMoney(h.unit_cost) }}</span>
+              <span v-else class="text-base-content/40">—</span>
+            </td>
+            <td class="text-right whitespace-nowrap">
+              <span v-if="histAmount(h) != null" class="badge" :class="diffBadge(toInt(h.difference))">{{ fmtMoney(Math.abs(histAmount(h))) }}</span>
               <span v-else class="text-base-content/40">—</span>
             </td>
             <td>{{ shortName(h.user_name) || h.user_id || '—' }}</td>

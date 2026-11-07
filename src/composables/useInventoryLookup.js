@@ -1,7 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import Swal from 'sweetalert2'
 import * as inventoryApi from '@/services/inventoryLookup'
-import { toInt, siteLabel, rowKey, fmtDate } from '@/utils/inventoryLookupHelpers'
+import { toInt, siteLabel, rowKey, fmtDate, histAmount } from '@/utils/inventoryLookupHelpers'
 
 const PAGE_SIZE = 200
 
@@ -767,7 +767,7 @@ export function useInventoryLookup(user) {
 
   function exportHistoryCsv() {
     if (!histRows.value.length) return
-    const cols = ['Hora', 'product_id', 'Artículo', 'Marca', 'Color', 'Talla', 'Contado', 'QAD antes', 'Diferencia', 'QAD final', 'Usuario', 'Estado']
+    const cols = ['Hora', 'product_id', 'Artículo', 'Marca', 'Color', 'Talla', 'Contado', 'QAD antes', 'Diferencia', 'Movimiento', 'QAD final', 'Costo unitario', 'Monto', 'Usuario', 'Estado']
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = [
       cols.map(esc).join(','),
@@ -775,8 +775,11 @@ export function useInventoryLookup(user) {
         fmtDate(h.sent_at), h.product_id, h.article || '', h.brand_name || '',
         h.color_label || '', h.size_label || '', toInt(h.counted_qty),
         h.qad_qty != null ? toInt(h.qad_qty) : '',
-        h.difference != null ? toInt(h.difference) : '',
+        h.difference != null ? Math.abs(toInt(h.difference)) : '',
+        toInt(h.difference) < 0 ? 'Salida' : toInt(h.difference) > 0 ? 'Entrada' : '',
         String(h.api_status || '').toUpperCase() === 'OK' ? toInt(h.counted_qty) : '',
+        h.unit_cost != null ? Number(h.unit_cost).toFixed(2) : '',
+        histAmount(h) != null ? Math.abs(histAmount(h)).toFixed(2) : '',
         h.user_name || h.user_id || '', h.api_status || '',
       ].map(esc).join(',')),
     ]
