@@ -236,6 +236,14 @@ async function confirmDespachador({ id, name }) {
   const { order } = despachadorModal.value
   const res = await store.almacenAssignDespachador(order.id, id, name)
   despachadorModal.value = null
+  // Domicilio no pasa por Empacador: igual que POS, al asignar despachador queda
+  // empacado para que Última Milla lo vea en pendientes de asignar.
+  if (res.ok && isCarrierDomicilio(order)) {
+    const packRes = await store.almacenPack(order.id, String(id), name)
+    if (packRes.ok) { showToast('success', 'Despachador asignado y pedido empacado'); await store.fetchAlmacen() }
+    else { showToast('error', packRes.message); await store.fetchAlmacen() }
+    return
+  }
   if (res.ok) { showToast('success', 'Despachador asignado'); await store.fetchAlmacen() }
   else showToast('error', res.message)
 }
