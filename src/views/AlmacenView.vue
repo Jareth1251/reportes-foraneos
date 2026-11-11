@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter }        from 'vue-router'
 import { useAuthStore }     from '@/stores/auth'
 import { useForaneosStore } from '@/stores/foraneos'
@@ -18,6 +18,44 @@ import IncidentModal        from '@/components/almacen/IncidentModal.vue'
 const auth  = useAuthStore()
 const store = useForaneosStore()
 
+// ── Tema claro / oscuro ────────────────────────────────────────────────
+const THEME_KEY = 'foraneos_theme'
+const isDark    = ref(false)
+
+function applyTheme(dark) {
+  const html = document.documentElement
+  html.setAttribute('data-theme', dark ? 'dark' : 'light')
+  localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
+}
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+  applyTheme(isDark.value)
+}
+
+onMounted(() => {
+  
+  const saved = localStorage.getItem(THEME_KEY)
+  if (saved === 'dark' || saved === 'light') {
+    isDark.value = saved === 'dark'
+  } else {
+    isDark.value = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  }
+  applyTheme(isDark.value)
+})
+
+// Sincronizar si el usuario cambia el tema del sistema (opcional, solo si no hay preferencia guardada)
+if (typeof window !== 'undefined' && window.matchMedia) {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)')
+  mq.addEventListener?.('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+      isDark.value = e.matches
+      applyTheme(isDark.value)
+    }
+  })
+}
+
+// ── Estado del módulo ──────────────────────────────────────────────────
 // Gerencia (001/002) entra a este módulo solo para visibilidad, no para operar el almacén.
 const isViewOnly = computed(() => {
   const deptId = String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim()
@@ -31,8 +69,8 @@ const onlyDomicilio = ref(false)
 const toast         = ref(null)
 const printViewRef  = ref(null)
 
-// ── Estado de modales ──────────────────────────────────────────────────────
-const surtidorModal    = ref(null)   // { order }
+// ── Estado de modales ──────────────────────────────────────────────────
+const surtidorModal    = ref(null)
 const despachadorModal = ref(null)
 const empacadorModal   = ref(null)
 const envioModal       = ref(null)
@@ -49,7 +87,7 @@ const agentsLoading   = ref(false)
 
 onMounted(() => store.fetchAlmacen())
 
-// ── Helpers de tiempo ──────────────────────────────────────────────────────
+// ── Helpers de tiempo ──────────────────────────────────────────────────
 function ymdTZ(dateLike) {
   try {
     const parts = new Intl.DateTimeFormat('es-MX', {
@@ -133,7 +171,7 @@ function guiaLabel(order) {
   return `${list.length} guías`
 }
 
-// ── Filtros ────────────────────────────────────────────────────────────────
+// ── Filtros ────────────────────────────────────────────────────────────
 const filteredBase = computed(() => {
   const base = store.orders.filter(o =>
     onlyDomicilio.value ? isCarrierDomicilio(o) : !isCarrierDomicilio(o)
@@ -167,7 +205,7 @@ function getCarrierCount(carrier) {
   return filteredBase.value.filter(o => norm(o.carrier) === norm(carrier)).length
 }
 
-// ── Tabs de status ─────────────────────────────────────────────────────────
+// ── Tabs de status ─────────────────────────────────────────────────────
 const STATUS_TABS = computed(() => [
   { bucket: 'facturado',           label: 'Asignar Surtidor',   color: '#00897B', icon: '🧑‍🏭', textColor: '#fff' },
   { bucket: 'surtiendo',           label: 'Surtiendo',           color: '#FFD700', icon: '🛠️',  textColor: '#000' },
@@ -200,20 +238,20 @@ const visibleOrders  = computed(() => {
   })
 })
 
-// ── Agentes ────────────────────────────────────────────────────────────────
+// ── Agentes ────────────────────────────────────────────────────────────
 async function loadAgents() {
   agentsLoading.value = true
   warehouseAgents.value = await store.fetchWarehouseAgents(auth.user?.site ?? '')
   agentsLoading.value = false
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────
+// ── Toast ──────────────────────────────────────────────────────────────
 function showToast(type, message) {
   toast.value = { type, message }
   setTimeout(() => (toast.value = null), 3500)
 }
 
-// ── Acciones ───────────────────────────────────────────────────────────────
+// ── Acciones ───────────────────────────────────────────────────────────
 async function confirmSurtidor({ id, name }) {
   const { order } = surtidorModal.value
   const res = await store.almacenAssignSurtidor(order.id, id, name)
@@ -278,7 +316,7 @@ async function confirmGuia(raw) {
   else showToast('error', res.message)
 }
 
-// ── Apertura de modales ────────────────────────────────────────────────────
+// ── Apertura de modales ────────────────────────────────────────────────
 function openSurtidor(order)    { surtidorModal.value    = { order }; loadAgents() }
 function openDespachador(order) { despachadorModal.value = { order }; loadAgents() }
 function openEmpacador(order)   { empacadorModal.value   = { order }; loadAgents() }
@@ -287,7 +325,7 @@ function openDeliver(order)     { deliverModal.value = { order }; deliverName.va
 function openReturn(order)      { returnModal.value = { order }; returnReason.value = '' }
 function openIncident()         { incidentOpen.value = true; loadAgents() }
 
-// ── Imprimir ───────────────────────────────────────────────────────────────
+// ── Imprimir ───────────────────────────────────────────────────────────
 function buildPrintOrders(item, turn) {
   const allDetails = item.all_order_details || []
   const orderedIds = [item.erp_order_id, ...(item.erp_group_list || [])]
@@ -318,43 +356,88 @@ async function handlePrint(order) {
   await printViewRef.value.print({ orders: buildPrintOrders(item, getTurno(order)) })
 }
 </script>
-
 <template>
-  <div class="min-h-screen bg-gray-100" style="font-family:sans-serif;">
+  <div class="min-h-screen bg-base-200" style="font-family:sans-serif;">
 
-    <!-- Navbar -->
-    <div class="navbar bg-white shadow-sm px-4 sticky top-0 z-30">
-      <div class="navbar-start gap-2 flex items-center">
+
+    <div class="navbar bg-base-100 shadow-sm px-3 sticky top-0 z-30 gap-2 flex-wrap">
+
+
+      <div class="flex items-center gap-2 flex-shrink-0">
         <button @click="router.push({ name: 'selector' })"
-                style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:0.95rem;font-weight:700;background-color:#1565C0;color:#fff;">
-          ← Módulos
+                class="btn btn-sm gap-1"
+                style="background-color:#1565C0;color:#fff;border:none;font-weight:700;">
+          Módulos
         </button>
-        <span style="font-weight:700;padding:4px 12px;border-radius:8px;color:#E65100;background:#FFE0B2;font-size:1.2rem;line-height:1.2;">
+
+        <span class="px-3 py-1 rounded-lg font-bold text-lg leading-tight"
+              style="color:#E65100;background:#FFE0B2;">
           {{ onlyDomicilio ? 'Pedidos Domicilio' : 'Pedidos Foráneos' }}
         </span>
-        <button :disabled="store.loading" @click="store.fetchAlmacen()"
-                style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;background-color:#FFA000;color:#fff;">
-          <span v-if="store.loading" class="loading loading-spinner loading-xs"></span>
-          <span v-else>🔄</span> Actualizar
-        </button>
-        <span v-if="store.lastFetch" class="text-xs text-gray-400 hidden md:block">
-          Última act. {{ fmtHora(store.lastFetch) }}
-        </span>
-        <button @click="onlyDomicilio = !onlyDomicilio; activeStatus = 'facturado'; activeCarrier = null"
-                style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;color:#fff;"
-                :style="{ backgroundColor: onlyDomicilio ? '#9C27B0' : '#000' }">
-          {{ onlyDomicilio ? 'Ver Foráneos' : 'Ver Domicilio' }}
-        </button>
-        <button v-if="!isViewOnly" @click="openIncident"
-                style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:0.85rem;color:#fff;background-color:#EF6C00;">
-          ⚠️ Registrar incidencia
-        </button>
       </div>
-      <div class="navbar-center">
-        <input v-model="searchText" type="search" placeholder="Buscar cliente, pedido o paquetería..."
-               class="input input-bordered input-sm w-72" />
+
+      <!-- ZONA CENTRAL: buscador -->
+      <div class="flex-1 flex justify-center min-w-[180px] order-3 lg:order-2 w-full lg:w-auto">
+        <input
+          v-model="searchText"
+          type="search"
+          placeholder="Buscar cliente, pedido o paquetería..."
+          class="input input-bordered input-sm w-full max-w-md"
+        />
       </div>
-      <div class="navbar-end">
+
+      <!-- ZONA DERECHA: acciones agrupadas -->
+      <div class="flex items-center gap-2 flex-shrink-0 order-2 lg:order-3 ml-auto lg:ml-0">
+
+        <!-- Grupo de acciones del módulo -->
+        <div class="flex items-center gap-1.5 flex-wrap">
+
+          <button
+            :disabled="store.loading"
+            @click="store.fetchAlmacen()"
+            class="btn btn-sm gap-1"
+            style="background-color:#FFA000;color:#fff;border:none;"
+            title="Actualizar datos"
+          >
+            <span v-if="store.loading" class="loading loading-spinner loading-xs"></span>
+            <span v-else>🔄</span>
+            <span class="hidden md:inline">Actualizar</span>
+          </button>
+
+          <span v-if="store.lastFetch" class="text-xs text-base-content/50 hidden xl:inline whitespace-nowrap">
+            {{ fmtHora(store.lastFetch) }}
+          </span>
+
+          <button
+            @click="onlyDomicilio = !onlyDomicilio; activeStatus = 'facturado'; activeCarrier = null"
+            class="btn btn-sm gap-1"
+            :style="{ backgroundColor: onlyDomicilio ? '#9C27B0' : '#000', color: '#fff', border: 'none' }"
+          >
+            {{ onlyDomicilio ? 'Ver Foráneos' : 'Ver Domicilio' }}
+          </button>
+
+          <button
+            v-if="!isViewOnly"
+            @click="openIncident"
+            class="btn btn-sm gap-1"
+            style="background-color:#EF6C00;color:#fff;border:none;"
+          >
+            ⚠️ <span class="hidden md:inline">Registrar incidencia</span>
+          </button>
+
+          <!-- Toggle de tema -->
+          <button
+            @click="toggleTheme"
+            class="btn btn-sm btn-ghost"
+            :title="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+            aria-label="Cambiar tema"
+          >
+            <span v-if="isDark" style="font-size:1.1rem;">☀️</span>
+            <span v-else style="font-size:1.1rem;">🌙</span>
+          </button>
+        </div>
+
+        <!-- Avatar / menú de usuario -->
         <div class="dropdown dropdown-end">
           <div tabindex="0" role="button" class="avatar placeholder cursor-pointer">
             <div class="bg-primary text-primary-content rounded-full w-9">
@@ -368,7 +451,6 @@ async function handlePrint(order) {
         </div>
       </div>
     </div>
-
     <div class="p-4">
 
       <!-- Error -->
