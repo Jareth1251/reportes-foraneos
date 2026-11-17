@@ -135,6 +135,13 @@ const router = createRouter({
       beforeEnter: guardModuleRoute('pantalla-comedor'),
     },
     {
+      path: '/devoluciones-tienda',
+      name: 'devoluciones-tienda',
+      component: () => import('@/views/StoreReturnsView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: guardModuleRoute('devoluciones-tienda'),
+    },
+    {
       path: '/agentes-almacen',
       name: 'agentes-almacen',
       component: () => import('@/views/WarehouseAgentsView.vue'),
