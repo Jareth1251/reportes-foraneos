@@ -53,6 +53,48 @@ function productLabel(item) {
   return [item.product_code, item.color].filter(Boolean).join(' ')
 }
 
+// "CRDRYCAB-S" → modelo "CRDRYCAB", talla "S". Si el código no trae talla
+// después del último guion, se usa el campo size de QAD.
+function splitCode(item) {
+  const code = String(item.product_code || item.product_name || '')
+  const dash = code.lastIndexOf('-')
+  if (dash > 0) return { model: code.slice(0, dash), size: code.slice(dash + 1) }
+  return { model: code, size: item.size || '' }
+}
+
+// Agrupa partidas por modelo + color para que un pedido largo quepa en pocas
+// líneas: "CRDRYCAB VINO · S 18 · M 30 · L 18".
+function groupItems(items) {
+  const groups = new Map()
+  for (const item of items) {
+    const { model, size } = splitCode(item)
+    const key = `${model}|${item.color || ''}`
+    if (!groups.has(key)) groups.set(key, { key, label: [model, item.color].filter(Boolean).join(' '), sizes: [], total: 0 })
+    const group = groups.get(key)
+    group.sizes.push({ size, quantity: Number(item.quantity) })
+    group.total += Number(item.quantity)
+  }
+  return [...groups.values()]
+}
+
+function recordPieces(record) {
+  return record.items.reduce((sum, item) => sum + Number(item.quantity), 0)
+}
+
+const COLLAPSED_GROUPS = 2
+const expandedIds = ref(new Set())
+
+function toggleExpanded(id) {
+  const next = new Set(expandedIds.value)
+  next.has(id) ? next.delete(id) : next.add(id)
+  expandedIds.value = next
+}
+
+function visibleGroups(record) {
+  const groups = groupItems(record.items)
+  return expandedIds.value.has(record.id) ? groups : groups.slice(0, COLLAPSED_GROUPS)
+}
+
 // ─── Captura ─────────────────────────────────────────────────────────────
 const orderInput = ref('')
 const searching  = ref(false)
@@ -154,7 +196,7 @@ const listError = ref(null)
 
 const totals = computed(() => ({
   records: returns.value.length,
-  pieces: returns.value.reduce((sum, r) => sum + r.items.reduce((s, i) => s + Number(i.quantity), 0), 0),
+  pieces: returns.value.reduce((sum, r) => sum + recordPieces(r), 0),
 }))
 
 function setWeek(offset) {
@@ -300,13 +342,14 @@ onMounted(loadReturns)
             Este pedido ya tiene {{ order.previous_returns.length }} devolución(es) registrada(s):
             <span v-for="prev in order.previous_returns" :key="prev.id" class="block">
               {{ formatDate(prev.arrival_date) }} · {{ prev.reason_label }} ·
-              {{ prev.items.map(i => `${productLabel(i)} (${formatQty(i.quantity)})`).join(', ') }}
+              {{ formatQty(recordPieces(prev)) }} pzs ·
+              {{ groupItems(prev.items).map(g => `${g.label} (${formatQty(g.total)})`).join(', ') }}
             </span>
           </div>
 
           <!-- Líneas -->
-          <div class="overflow-x-auto mt-4">
-            <table class="table table-sm">
+          <div class="overflow-auto mt-4" style="max-height:420px;">
+            <table class="table table-sm table-pin-rows">
               <thead>
                 <tr>
                   <th>Producto</th>
@@ -395,6 +438,7 @@ onMounted(loadReturns)
                 <th>Vendedor</th>
                 <th>Producto</th>
                 <th class="text-right">Piezas</th>
+                <th>Pedido</th>
                 <th>Factura</th>
                 <th>Cliente</th>
                 <th>Motivo</th>
@@ -403,21 +447,26 @@ onMounted(loadReturns)
             </thead>
             <tbody>
               <tr v-if="!loading && !returns.length">
-                <td colspan="8" class="text-center text-gray-400 py-6">Sin devoluciones en este periodo</td>
+                <td colspan="9" class="text-center text-gray-400 py-6">Sin devoluciones en este periodo</td>
               </tr>
               <tr v-for="record in returns" :key="record.id" class="align-top">
                 <td class="whitespace-nowrap">{{ formatDate(record.arrival_date) }}</td>
                 <td>{{ record.sales_person_name || '—' }}</td>
-                <td>
-                  <div v-for="item in record.items" :key="item.line" class="whitespace-nowrap">{{ productLabel(item) }}</div>
+                <td style="min-width:260px;">
+                  <div v-for="group in visibleGroups(record)" :key="group.key" class="leading-snug mb-1">
+                    <span class="font-semibold">{{ group.label }}</span>
+                    <span class="text-xs text-gray-500">
+                      <template v-for="s in group.sizes" :key="s.size"> · {{ s.size || '—' }} <b class="text-gray-700">{{ formatQty(s.quantity) }}</b></template>
+                    </span>
+                  </div>
+                  <button v-if="groupItems(record.items).length > COLLAPSED_GROUPS"
+                          class="text-xs text-primary font-semibold" @click="toggleExpanded(record.id)">
+                    {{ expandedIds.has(record.id) ? 'Ver menos' : `+${groupItems(record.items).length - COLLAPSED_GROUPS} más` }}
+                  </button>
                 </td>
-                <td class="text-right">
-                  <div v-for="item in record.items" :key="item.line">{{ formatQty(item.quantity) }}</div>
-                </td>
-                <td class="whitespace-nowrap">
-                  {{ record.invoice_id || '—' }}
-                  <div class="text-xs text-gray-400">{{ record.sales_order_id }}</div>
-                </td>
+                <td class="text-right font-semibold">{{ formatQty(recordPieces(record)) }}</td>
+                <td class="whitespace-nowrap">{{ record.sales_order_id }}</td>
+                <td class="whitespace-nowrap">{{ record.invoice_id || '—' }}</td>
                 <td>{{ record.customer_name || '—' }}</td>
                 <td>
                   {{ record.reason_label }}
