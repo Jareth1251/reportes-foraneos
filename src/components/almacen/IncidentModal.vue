@@ -1,37 +1,94 @@
 <script setup>
 import { ref, watch } from 'vue'
-import { api } from '@/config/axios'
+import {
+  fetchIncidentTypes,
+  fetchIncidentsByOrder,
+  createIncident,
+  fetchIncidentAgents,
+} from '@/services/incidents'
 
 const props = defineProps({
   open:   { type: Boolean, default: false },
   orders: { type: Array,   default: () => [] },
-  agents: { type: Array,   default: () => [] },
-  agentsLoading: { type: Boolean, default: false },
   user:   { type: Object,  default: null },
 })
 
 const emit = defineEmits(['close', 'saved', 'error'])
 
+/* ---------- Estado ---------- */
+const department     = ref('surtido')
 const incidentTypes  = ref([])
+const incidentTypeId = ref(null)
+const loadingTypes   = ref(false)
+
+const agentList      = ref([])
+const agentsLoading  = ref(false)
+const agentId        = ref('')
+
 const erp            = ref('')
 const orderInfo      = ref(null)
 const incidentList   = ref([])
 const searched       = ref(false)
-const incidentTypeId = ref('')
-const agentId        = ref('')
 const cause          = ref('')
 const comment        = ref('')
 const loadingLookup  = ref(false)
 const saving         = ref(false)
 const formError      = ref('')
 
+const DEPARTMENT_OPTIONS = [
+  { value: 'surtido', label: 'Surtido' },
+  { value: 'piso',    label: 'Piso Ventas' },
+  { value: 'cajas',   label: 'Cajas' },
+]
+
+/* ---------- Cargas ---------- */
+async function loadIncidentTypes() {
+  loadingTypes.value   = true
+  incidentTypeId.value = null
+  try {
+    const res = await fetchIncidentTypes(department.value)
+    incidentTypes.value = res?.data || []
+  } catch (e) {
+    console.error('[IncidentModal] error cargando tipos', e)
+    incidentTypes.value = []
+    formError.value = e?.response?.data?.message
+      || 'No se pudieron cargar los tipos de incidencia.'
+  } finally {
+    loadingTypes.value = false
+  }
+}
+
+async function loadIncidentAgents() {
+  agentsLoading.value = true
+  agentId.value       = ''
+  try {
+    const list = await fetchIncidentAgents(
+      department.value,
+      props.user?.site ?? null
+    )
+    agentList.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    console.error('[IncidentModal] error cargando agentes', e)
+    agentList.value = []
+  } finally {
+    agentsLoading.value = false
+  }
+}
+
 function resetForm() {
-  incidentTypeId.value = ''
+  incidentTypeId.value = null
   agentId.value        = ''
   cause.value          = ''
   comment.value        = ''
 }
 
+
+watch(department, async () => {
+  formError.value = ''
+  await Promise.all([loadIncidentTypes(), loadIncidentAgents()])
+})
+
+/* ---------- Watch: apertura del modal ---------- */
 watch(() => props.open, (val) => {
   if (!val) return
   erp.value          = ''
@@ -39,20 +96,13 @@ watch(() => props.open, (val) => {
   incidentList.value = []
   searched.value     = false
   formError.value    = ''
+  department.value   = 'surtido'
   resetForm()
-  if (!incidentTypes.value.length) loadIncidentTypes()
+  loadIncidentTypes()
+  loadIncidentAgents()
 })
 
-async function loadIncidentTypes() {
-  try {
-    const { data } = await api.get('/surtido/incident-types')
-    incidentTypes.value = data?.data || []
-  } catch (e) {
-    console.error('[IncidentModal] error tipos de incidencia', e)
-    emit('error', 'No se pudieron cargar los tipos de incidencia')
-  }
-}
-
+/* ---------- Búsqueda de pedido ---------- */
 function findOrder(erpNorm) {
   return props.orders.find((o) => {
     const group = Array.isArray(o?.erp_group_list) ? o.erp_group_list : []
@@ -70,19 +120,19 @@ async function lookupOrder() {
   erp.value = erpNorm
   loadingLookup.value = true
   try {
-    const { data } = await api.get('/surtido/incidents', {
-      params: { erp_order_id: erpNorm },
-    })
+    const res = await fetchIncidentsByOrder(erpNorm)
     orderInfo.value    = findOrder(erpNorm)
-    incidentList.value = data?.data || []
+    incidentList.value = res?.data || []
     searched.value     = true
   } catch (e) {
     console.error('[IncidentModal] error buscando pedido', e)
-    formError.value = e?.response?.data?.message || 'No se pudo buscar el pedido. Intenta nuevamente.'
+    formError.value = e?.response?.data?.message
+      || 'No se pudo buscar el pedido. Intenta nuevamente.'
   } finally {
     loadingLookup.value = false
   }
 }
+
 
 async function addIncident() {
   const erpNorm = erp.value.trim().toUpperCase()
@@ -92,25 +142,26 @@ async function addIncident() {
   if (!agentId.value)        { formError.value = 'Selecciona el agente que provocó el error'; return }
   if (!cause.value.trim())   { formError.value = 'Describe la causa del error'; return }
 
-  const agent = props.agents.find(a => String(a.id) === String(agentId.value))
+  const agent = agentList.value.find(a => String(a.id) === String(agentId.value))
   const user  = props.user || {}
 
   saving.value = true
   try {
-    const payload = {
-      erp_order_id:     erpNorm,
-      incident_type_id: incidentTypeId.value,
-      comment:          [cause.value.trim(), comment.value.trim()].filter(Boolean).join(' — '),
-      agent_id:         agentId.value || null,
-      agent_name:       agent?.name || null,
-      created_by:       user.username || user.salesPersonId || user.salesperson_id || null,
-      created_by_name:  user.name || user.username || null,
-    }
+  const payload = {
+    erp_order_id:     erpNorm,
+    incident_type_id: incidentTypeId.value,
+    department:       department.value,
+    comment:          [cause.value.trim(), comment.value.trim()].filter(Boolean).join(' — '),
+    agent_id:         agentId.value || null,
+    agent_name:       agent?.name ? String(agent.name).trim().toUpperCase() : null, 
+    created_by:       user.username || user.salesPersonId || user.salesperson_id || null,
+    created_by_name:  user.name ? String(user.name).trim().toUpperCase() : (user.username || null), 
+  }
 
-    const { data } = await api.post('/surtido/incidents', payload)
+    const res = await createIncident(payload)
 
-    if (data?.ok && data?.data) {
-      incidentList.value = [data.data, ...incidentList.value]
+    if (res?.ok && res?.data) {
+      incidentList.value = [res.data, ...incidentList.value]
     }
     resetForm()
     emit('saved')
@@ -133,7 +184,7 @@ async function addIncident() {
       <div style="background:linear-gradient(135deg,#EF6C00,#BF360C);padding:24px 24px 20px;text-align:center;">
         <div class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl"
              style="background:rgba(255,255,255,0.15);">⚠️</div>
-        <h3 class="text-white text-lg font-bold m-0">Registrar incidencia de surtido</h3>
+        <h3 class="text-white text-lg font-bold m-0">Registrar incidencias</h3>
         <p class="text-white/75 text-xs mt-1">Un mismo pedido admite varias incidencias</p>
       </div>
 
@@ -184,24 +235,48 @@ async function addIncident() {
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label class="block">
-            <span class="lbl">Tipo de error</span>
-            <select v-model="incidentTypeId" class="select select-bordered select-sm w-full">
-              <option value="">Selecciona un tipo</option>
-              <option v-for="t in incidentTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
+            <span class="lbl">Área</span>
+            <select v-model="department" class="select select-bordered select-sm w-full">
+              <option v-for="d in DEPARTMENT_OPTIONS" :key="d.value" :value="d.value">
+                {{ d.label }}
+              </option>
             </select>
           </label>
+
+          <label class="block">
+            <span class="lbl">Tipo de error</span>
+            <select v-model="incidentTypeId"
+                    class="select select-bordered select-sm w-full"
+                    :disabled="loadingTypes">
+              <option :value="null" disabled>
+                {{ loadingTypes ? 'Cargando…' : 'Selecciona un concepto' }}
+              </option>
+              <option v-for="t in incidentTypes" :key="t.id" :value="t.id">
+                {{ t.name }}
+              </option>
+            </select>
+          </label>
+
           <label class="block">
             <span class="lbl">Agente que provocó el error</span>
-            <select v-model="agentId" class="select select-bordered select-sm w-full" :disabled="agentsLoading">
-              <option value="">{{ agentsLoading ? 'Cargando agentes...' : 'Selecciona un agente' }}</option>
-              <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }}</option>
+            <select v-model="agentId"
+                    class="select select-bordered select-sm w-full"
+                    :disabled="agentsLoading">
+              <option value="">
+                {{ agentsLoading ? 'Cargando agentes...' : 'Selecciona un agente' }}
+              </option>
+              <option v-for="a in agentList" :key="a.id" :value="a.id">
+                {{ a.name }}
+              </option>
             </select>
           </label>
+
           <label class="block sm:col-span-2">
             <span class="lbl">Causa del error</span>
             <textarea v-model="cause" rows="3" placeholder="Describe qué originó el error"
                       class="textarea textarea-bordered w-full resize-y" />
           </label>
+
           <label class="block sm:col-span-2">
             <span class="lbl">Comentario <span class="font-normal text-base-content/40 normal-case">(opcional)</span></span>
             <textarea v-model="comment" rows="3" placeholder="Comentario adicional"
