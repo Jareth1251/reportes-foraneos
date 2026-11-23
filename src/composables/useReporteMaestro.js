@@ -65,7 +65,10 @@ function mapTiendaRow(r) {
     asesor: r.asesor || '',
     tipo_pedidos: clasificacionPor(r.quantity) === 'Mayoreo' ? 'MAY' : 'MEN',
     status_label: r.status_label || '',
+    // Respaldo del back de Node ("Tipo: causa"); attachIncidents lo reemplaza
+    // por tipo / detalle separados cuando responde API-Base.
     incidencias: r.incidencias || '',
+    incidencias_detalle: '',
     incidencias_agentes: r.incidencias_agentes || '',
     llego: r.time_arrive_at || '',
     registro_turno: r.usr_arrive_name || '',
@@ -267,6 +270,7 @@ function mapPaginaRow(order) {
     facturado_por: order.Facturador || '',
     comprobante_pago: order.comprobante_pago_path ? 'Sí' : 'Sin comprobante',
     incidencias: order.incomplete_reason || '',
+    incidencias_detalle: '',
     solucion_aplicada: order.solution || '',
     llego: fmtTime(paidAt),
     empezo_surtir: fmtTime(order.surtido_start),
@@ -289,32 +293,51 @@ function mapPaginaRow(order) {
   return row
 }
 
-// Incidencias de surtido (registradas desde Almacén) por número de pedido.
+// Incidencias (surtido / piso / cajas) por número de pedido o por turno.
 // Foráneos y página no tienen checkin_id, así que se buscan por erp_order_id
-// (incluidos los agregados) -- mismo endpoint que usa ForaneosRepView.vue.
+// (incluidos los agregados); las de tienda también por checkin_id.
+// "Incidencias" lleva solo el tipo y "Detalle de incidencia" la causa y el
+// comentario, en el mismo orden.
 async function attachIncidents(entries) {
   const erps = [...new Set(entries.flatMap(({ keys }) => keys))]
-  if (!erps.length) return
-  let rows = []
+  const checkinIds = [...new Set(entries.map(({ checkinId }) => checkinId).filter(Boolean))]
+  if (!erps.length && !checkinIds.length) return
+  let incidents = []
   try {
-    const res = await fetch('/node-api/surtido-incident/lookup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ erp_order_ids: erps }),
+    const { data } = await api.post('/surtido/incidents/lookup', {
+      erp_order_ids: erps,
+      checkin_ids: checkinIds,
     })
-    const data = await res.json()
-    rows = data?.result?.[0]?.data || []
+    incidents = Array.isArray(data?.data) ? data.data : []
   } catch (err) {
     console.error('[useReporteMaestro] error incidencias', err)
     return
   }
-  const byErp = new Map(rows.map((r) => [String(r.erp_order_id).toUpperCase(), r]))
-  for (const { row, keys, base } of entries) {
-    const found = keys.map((k) => byErp.get(k)).filter(Boolean)
-    row.incidencias = [base, ...found.map((r) => r.incidencias)].filter(Boolean).join('; ')
-    row.incidencias_agentes = [...new Set(
-      found.flatMap((r) => String(r.incidencias_agentes || '').split(', ')).filter(Boolean)
-    )].join(', ')
+
+  const byErp = new Map()
+  const byCheckin = new Map()
+  for (const inc of incidents) {
+    const erp = String(inc.erp_order_id || '').toUpperCase()
+    if (!byErp.has(erp)) byErp.set(erp, [])
+    byErp.get(erp).push(inc)
+    if (inc.checkin_id) {
+      if (!byCheckin.has(inc.checkin_id)) byCheckin.set(inc.checkin_id, [])
+      byCheckin.get(inc.checkin_id).push(inc)
+    }
+  }
+
+  for (const { row, keys, checkinId, base } of entries) {
+    const found = new Map()
+    for (const inc of [...keys.flatMap((k) => byErp.get(k) || []), ...(byCheckin.get(checkinId) || [])]) {
+      found.set(inc.id, inc)
+    }
+    const list = [...found.values()].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+    row.incidencias = [base, ...list.map((i) => i.incident_type_name)].filter(Boolean).join('; ')
+    row.incidencias_detalle = list
+      .map((i) => [i.cause, i.comment].map((t) => String(t || '').trim()).filter(Boolean).join(' — '))
+      .filter(Boolean)
+      .join('; ')
+    row.incidencias_agentes = [...new Set(list.map((i) => i.agent_name).filter(Boolean))].join(', ')
   }
 }
 
@@ -361,7 +384,11 @@ export function useReporteMaestro(site) {
         }),
       ])
 
-      tiendaRows.value = checkinReports.detail.value.map(mapTiendaRow)
+      const tiendaEntries = checkinReports.detail.value.map((r) => {
+        const row = mapTiendaRow(r)
+        return { row, checkinId: r.id, base: '' }
+      })
+      tiendaRows.value = tiendaEntries.map(({ row }) => row)
 
       const foraneosSorted = (Array.isArray(foraneosData) ? foraneosData : [])
         .slice()
@@ -388,7 +415,9 @@ export function useReporteMaestro(site) {
         return { row, keys: erpKeysOf(order.erp_order_id), base: order.incomplete_reason || '' }
       })
 
-      await attachIncidents([...foraneoEntries, ...paginaEntries])
+      // Las llaves de tienda se toman después del merge "cliente pasa".
+      tiendaEntries.forEach((e) => { e.keys = erpKeys(e.row.erp_order) })
+      await attachIncidents([...tiendaEntries, ...foraneoEntries, ...paginaEntries])
 
       const foraneoRows = foraneoEntries.map(({ row }) => row)
       const paginaRows = paginaEntries.map(({ row }) => row)
