@@ -298,10 +298,30 @@ export function useReporteMaestro(site) {
   const foraneoAndPaginaRows = ref([])
 
   const checkinReports = useCheckinReports(site)
+  const PAGE_SIZE = 10
+  const currentPage = ref(1)
 
-  const rows = computed(() =>
-    [...tiendaRows.value, ...foraneoAndPaginaRows.value].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))
+  const allRows = computed(() =>
+    [...tiendaRows.value, ...foraneoAndPaginaRows.value]
+      .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))
   )
+    const totalPages = computed(() =>
+    Math.max(1, Math.ceil(allRows.value.length / PAGE_SIZE))
+  )
+  const rows = computed(() => {
+    const page = Math.min(Math.max(1, currentPage.value), totalPages.value)
+    const start = (page - 1) * PAGE_SIZE
+    return allRows.value.slice(start, start + PAGE_SIZE)
+  })
+
+  function setPage(page) {
+    currentPage.value = Math.min(Math.max(1, Number(page) || 1), totalPages.value)
+  }
+
+  function nextPage() { setPage(currentPage.value + 1) }
+  function prevPage() { setPage(currentPage.value - 1) }
+
+ 
 
   async function fetchAll({ force = false } = {}) {
     loading.value = true
@@ -345,6 +365,7 @@ export function useReporteMaestro(site) {
       const paginaRows = (paginaData || []).map(mapPaginaRow)
 
       foraneoAndPaginaRows.value = [...foraneoRows, ...paginaRows]
+       currentPage.value = 1
     } catch (err) {
       console.error('[useReporteMaestro] error', err)
     } finally {
@@ -361,5 +382,7 @@ export function useReporteMaestro(site) {
     fetchAll({ force: true })
   }
 
-  return { loading, dateStart, dateEnd, rows, fetchAll, shiftDay }
+  return { loading, dateStart, dateEnd, rows,loading, dateStart, dateEnd,
+    rows, allRows, currentPage, totalPages, setPage, nextPage, prevPage,
+    fetchAll, shiftDay, fetchAll, shiftDay }
 }

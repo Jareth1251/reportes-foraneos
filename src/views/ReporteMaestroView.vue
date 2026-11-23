@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { SESSION_KEY } from '@/router'
@@ -16,24 +16,54 @@ if (!sessionStorage.getItem(SESSION_KEY)) {
 const auth = useAuthStore()
 const siteFilter = ref(SITIOS[0].id)
 
-const { loading, dateStart, dateEnd, rows, fetchAll, shiftDay } = useReporteMaestro(siteFilter)
+// Traemos allRows (sin paginar). La paginación se hace en el componente
+// para que los filtros de área/búsqueda apliquen sobre TODOS los registros,
+// no solo sobre la página visible.
+const { loading, dateStart, dateEnd, allRows, fetchAll, shiftDay } = useReporteMaestro(siteFilter)
 
+// --- Filtros ---
 const AREAS = ['Tienda', 'Cliente pasa', 'Foráneo', 'Domicilio', 'Página']
 const areaFilter = ref('todas')
 const searchText = ref('')
 
-const displayRows = computed(() => {
-  let list = rows.value
+const filteredRows = computed(() => {
+  let list = allRows.value
   if (areaFilter.value !== 'todas') list = list.filter((r) => r.area === areaFilter.value)
   const term = searchText.value.trim().toLowerCase()
   if (term) list = list.filter((r) => String(r.erp_order || '').toLowerCase().includes(term))
   return list
 })
 
+// --- Paginación (10 en 10) ---
+const PAGE_SIZE = 10
+const currentPage = ref(1)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / PAGE_SIZE)))
+
+const displayRows = computed(() => {
+  const page = Math.min(Math.max(1, currentPage.value), totalPages.value)
+  const start = (page - 1) * PAGE_SIZE
+  return filteredRows.value.slice(start, start + PAGE_SIZE)
+})
+
+function prevPage() { currentPage.value = Math.max(1, currentPage.value - 1) }
+function nextPage() { currentPage.value = Math.min(totalPages.value, currentPage.value + 1) }
+
+// Resetear página al cambiar filtros
+watch([areaFilter, searchText], () => { currentPage.value = 1 })
+
+// Resetear página cuando cambian los datos (fecha, sitio, refresh)
+watch(allRows, () => { currentPage.value = 1 })
+
+// --- Exportar (todas las filas filtradas, no solo la página) ---
 const fieldCount = Object.keys(MAESTRO_FIELDS).length
 
 function exportReport() {
-  exportToExcel(displayRows.value, MAESTRO_FIELDS, `ReporteMaestro_${dateStart.value}_a_${dateEnd.value}.xlsx`)
+  exportToExcel(
+    filteredRows.value,
+    MAESTRO_FIELDS,
+    `ReporteMaestro_${dateStart.value}_a_${dateEnd.value}.xlsx`
+  )
 }
 
 onMounted(() => fetchAll())
@@ -45,7 +75,7 @@ onMounted(() => fetchAll())
     <!-- Barra superior fija -->
     <div class="flex-none bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-2 flex items-center justify-between shadow-md">
       <div class="flex items-center gap-3">
-        <button class="btn btn-sm bg-white text-slate-900 hover:bg-slate-50 border-0 font-bold" @click="router.push({ name: 'selector' })">← Módulos</button>
+        <button class="btn btn-sm bg-white text-slate-900 hover:bg-slate-50 border-0 font-bold" @click="router.push({ name: 'selector' })">Módulos</button>
         <span class="text-white font-bold text-sm">🗂️ Reporte Maestro</span>
       </div>
       <button class="btn btn-xs bg-white/10 border-white/20 text-white/70 hover:bg-white/20" @click="auth.logout().then(() => router.push('/login'))">Salir</button>
@@ -82,7 +112,8 @@ onMounted(() => fetchAll())
 
       <div class="ml-auto flex items-center gap-3">
         <span class="text-xs text-base-content/70">
-          <b class="text-base-content">{{ displayRows.length }}</b> {{ displayRows.length === 1 ? 'registro' : 'registros' }}
+          <b class="text-base-content">{{ filteredRows.length }}</b>
+          {{ filteredRows.length === 1 ? 'registro' : 'registros' }}
         </span>
         <button class="btn btn-xs btn-primary" :class="{ loading }" @click="fetchAll({ force: true })">
           <span v-if="!loading">↻ Actualizar</span>
@@ -118,6 +149,29 @@ onMounted(() => fetchAll())
           </tbody>
         </table>
       </div>
+    </div>
+
+    <!-- Paginación -->
+    <div class="flex-none bg-base-100 border-t border-base-300 px-4 py-2 flex items-center justify-center gap-3 shadow-sm">
+      <button
+        class="btn btn-xs"
+        :disabled="currentPage === 1"
+        @click="prevPage"
+      >Anterior</button>
+
+      <span class="text-xs text-base-content/70">
+        Página <b class="text-base-content">{{ currentPage }}</b> de
+        <b class="text-base-content">{{ totalPages }}</b>
+        <span class="ml-2 text-base-content/40">
+          ({{ displayRows.length }} de {{ filteredRows.length }})
+        </span>
+      </span>
+
+      <button
+        class="btn btn-xs"
+        :disabled="currentPage === totalPages"
+        @click="nextPage"
+      >Siguiente</button>
     </div>
   </div>
 </template>
