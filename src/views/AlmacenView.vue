@@ -1,4 +1,5 @@
 <script setup>
+import { timeSince } from '@/utils/elapsedTime'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter }        from 'vue-router'
 import { useAuthStore }     from '@/stores/auth'
@@ -116,14 +117,6 @@ const turnoMap = computed(() => {
 function getTurno(order)      { return turnoMap.value[order?.id] ?? '—' }
 function fmtHora(ts)          { if (!ts) return '—'; return new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(ts)) }
 function fmtFecha(ts)         { if (!ts) return 'No disponible'; return new Date(ts).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
-function timeSince(ts) {
-  if (!ts) return '—'
-  const mins = Math.floor((Date.now() - new Date(ts).getTime()) / 60_000)
-  if (mins < 1) return '0 min'
-  if (mins < 60) return `${mins} min`
-  const h = Math.floor(mins / 60), m = mins % 60
-  return m ? `${h}h ${m}m` : `${h}h`
-}
 function getStatusStartTime(order) {
   const st = String(order?.status || '').toLowerCase()
   switch (st) {

@@ -1,4 +1,5 @@
 <script setup>
+import { timeSince } from '@/utils/elapsedTime'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -89,15 +90,6 @@ function fmtHora(ts) {
     timeZone: 'America/Mexico_City',
     hour: '2-digit', minute: '2-digit', hour12: true,
   }).format(new Date(ts))
-}
-
-function timeSince(ts) {
-  if (!ts) return '—'
-  const mins = Math.floor((Date.now() - new Date(ts).getTime()) / 60_000)
-  if (mins < 1)  return '0 min'
-  if (mins < 60) return `${mins} min`
-  const h = Math.floor(mins / 60), m = mins % 60
-  return m ? `${h}h ${m}m` : `${h}h`
 }
 
 function erpList(order) {
