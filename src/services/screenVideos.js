@@ -34,8 +34,9 @@ export const MAX_UPLOAD_MB = 100
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 export const MAX_DURATION_SECONDS = 60
 
-export async function listScreenVideos() {
-  const { data } = await api.get('/screen-videos')
+// group: 'turns' (default en API-Base) o 'lounge' (Pantalla Comedor).
+export async function listScreenVideos(group) {
+  const { data } = await api.get('/screen-videos', { params: group ? { group } : {} })
   return Array.isArray(data) ? data : []
 }
 

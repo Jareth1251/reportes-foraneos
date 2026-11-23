@@ -147,16 +147,17 @@ async function addIncident() {
 
   saving.value = true
   try {
-  const payload = {
-    erp_order_id:     erpNorm,
-    incident_type_id: incidentTypeId.value,
-    department:       department.value,
-    comment:          [cause.value.trim(), comment.value.trim()].filter(Boolean).join(' — '),
-    agent_id:         agentId.value || null,
-    agent_name:       agent?.name ? String(agent.name).trim().toUpperCase() : null, 
-    created_by:       user.username || user.salesPersonId || user.salesperson_id || null,
-    created_by_name:  user.name ? String(user.name).trim().toUpperCase() : (user.username || null), 
-  }
+    const payload = {
+      erp_order_id:     erpNorm,
+      incident_type_id: incidentTypeId.value,
+      department:       department.value,
+      cause:            cause.value.trim(),
+      comment:          comment.value.trim() || null,
+      agent_id:         agentId.value || null,
+      agent_name:       agent?.name ? String(agent.name).trim().toUpperCase() : null,
+      created_by:       user.sales_person_id || user.salesPersonId || null,
+      created_by_name:  user.name ? String(user.name).trim().toUpperCase() : null,
+    }
 
     const res = await createIncident(payload)
 

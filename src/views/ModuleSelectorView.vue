@@ -4,18 +4,15 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { SESSION_KEY } from '@/router'
 import { getWarehouseManagerScope } from '@/utils/warehouseManagerScope'
-import { MODULE_DEFS, getModuleKeysForDept } from '@/utils/departmentModules'
+import { MODULE_DEFS, getModuleKeysForUser } from '@/utils/departmentModules'
 
 const router = useRouter()
 const auth   = useAuthStore()
 
-const deptId = computed(() =>
-  String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim()
-)
 const warehouseManagerScope = computed(() => getWarehouseManagerScope(auth.user))
 
 const MODULES = computed(() => {
-  const mods = getModuleKeysForDept(deptId.value).map(k => MODULE_DEFS[k])
+  const mods = getModuleKeysForUser(auth.user).map(k => MODULE_DEFS[k])
   if (warehouseManagerScope.value) mods.push(MODULE_DEFS['agentes-almacen'])
   return mods
 })

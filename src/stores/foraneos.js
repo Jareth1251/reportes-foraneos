@@ -131,33 +131,16 @@ export const useForaneosStore = defineStore('foraneos', () => {
     }
   }
 
-    const POS_DEPT_CODES = {
-    cajas:   ['004'],
-    piso:    ['006'],
-    surtido: ['007'],
+  // Surtidor / despachador / empacador: solo agentes de almacén. Los agentes
+  // del modal de incidencias (por área) se piden en services/incidents.js.
+  async function fetchWarehouseAgents(site, q = '') {
+    try {
+      const { data } = await api.get('/warehouse-agents/options', { params: { site, q } })
+      return Array.isArray(data) ? data : []
+    } catch {
+      return []
+    }
   }
-async function fetchWarehouseAgents(site, q = '', department = null) {
-  try {
-    const params = { site, q }
-    if (department) params.department = department
-    const { data } = await api.get('/surtido/agents', { params })
-    return Array.isArray(data) ? data : (data?.data ?? [])
-  } catch {
-    return []
-  }
-}
-
-
-async function fetchAgents(site, q = '', department = null) {
-  try {
-    const params = { site, q }
-    if (department) params.department = department
-    const { data } = await api.get('/surtido/agents', { params })
-    return data?.data ?? (Array.isArray(data) ? data : [])
-  } catch {
-    return []
-  }
-}
 
   async function cajasUpdateStatus(id, newStatus) {
     return _action(id, () => api.put(`/foraneos/${id}/cajas-status`, { newStatus }))
@@ -208,7 +191,7 @@ async function fetchAgents(site, q = '', department = null) {
 
   return {
     orders, loading, error, lastFetch, actionLoading, byId,
-    fetchCajas, fetchAlmacen, fetchForaneos, getDetail, fetchWarehouseAgents,fetchAgents, POS_DEPT_CODES,   
+    fetchCajas, fetchAlmacen, fetchForaneos, getDetail, fetchWarehouseAgents,
     startPoll, stopPoll,
     facturar, updateStatus, setInvoice, updateGuia,
     assignSurtidor, pack, deliver, returnToAdvisor,
