@@ -131,6 +131,8 @@ export const useForaneosStore = defineStore('foraneos', () => {
     }
   }
 
+  // Surtidor / despachador / empacador: solo agentes de almacén. Los agentes
+  // del modal de incidencias (por área) se piden en services/incidents.js.
   async function fetchWarehouseAgents(site, q = '') {
     try {
       const { data } = await api.get('/warehouse-agents/options', { params: { site, q } })
