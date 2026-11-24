@@ -75,7 +75,7 @@ function exportAlmacen() {
           <tr class="text-sm">
             <th>Turno</th><th>Cliente</th><th>Pedido</th><th>Cant.</th><th>Estado</th>
             <th>T. Total</th><th>Recibe/Asigna Surtidor</th><th>Surtiendo/Surtido</th><th>Surtido/Entregado</th>
-            <th>Lo atendió en Almacén</th><th>Lo surtió</th><th>Lo entregó</th><th>Fecha</th>
+            <th>Lo atendió en Almacén</th><th>Surtidor</th><th>Despachador</th><th>Fecha</th>
           </tr>
         </thead>
         <tbody>

@@ -28,3 +28,18 @@ export const fetchIncidentAgents = (department, site = null, q = '') =>
 export const createIncident = (payload) =>
   api.post('/surtido/incidents', payload)
      .then(r => r.data)
+// Incidencias con cliente: cliente, asesor y factura (QAD) + surtidor,
+// despachador y área responsable sugerida. QAD puede tardar varios segundos.
+export const fetchIncidentOrderContext = (erpOrderId) =>
+  api.get(`/surtido/incidents/order-context/${encodeURIComponent(erpOrderId)}`, { timeout: 40000 })
+     .then(r => r.data?.data ?? null)
+
+export const fetchCustomerIncidentReport = (params) =>
+  api.get('/surtido/incidents/customer-report', { params })
+     .then(r => r.data?.data ?? [])
+
+export const RESPONSIBLE_AREAS = [
+  { value: 'domicilio', label: 'Domicilio' },
+  { value: 'foraneo',   label: 'Foráneo' },
+  { value: 'mostrador', label: 'Mostrador' },
+]
