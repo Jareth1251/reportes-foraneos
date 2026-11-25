@@ -26,6 +26,7 @@ export const MAESTRO_FIELDS = {
   comentarios: 'Comentarios',
   comprobante_pago: 'Comprobante de Pago',
   incidencias: 'Incidencias',
+  incidencias_area: 'Área con incidencia',
   incidencias_detalle: 'Detalle de incidencia',
   incidencias_agentes: 'Agente con Incidencia',
   solucion_aplicada: 'Solución Aplicada',
