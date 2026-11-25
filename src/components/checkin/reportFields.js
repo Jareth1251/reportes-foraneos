@@ -1,3 +1,5 @@
+// En checkin quien entrega el pedido al cliente (usr_delivered) es el
+// despachador: mismo nombre que en foráneos/página e incidencias con cliente.
 export const DETALLE_FIELDS = {
   turn: 'Turno', name: 'Cliente', erp_order_grouped: 'Pedido', erp_order_count: 'Conteo de pedidos',
   quantity: 'Cantidad', asesor: 'Asesor', tipo_pedidos: 'Tipo pedidos', monto: 'Monto',
@@ -18,8 +20,8 @@ export const DETALLE_FIELDS = {
   diff_total_at: 'Tiempo en Tienda', pause_reason_label: 'Motivo Pausa', diffpaused_at: 'Tiempo Pausado',
   usr_name_paused: 'Lo pausó', usr_name_creating_order: 'Lo atendió', usr_name_order_created: 'Le creó el pedido',
   usr_name_paying: 'Le atendió en cajas', usr_name_transferencia: 'Lo mandó a Transferencia',
-  usr_name_stocked: 'Lo atendió en Almacén', usr_name_at_stock: 'Lo surtió',
-  usr_name_at_deliver: 'Asignó la Entrega', usr_name_delivered: 'Lo Entregó',
+  usr_name_stocked: 'Lo atendió en Almacén', usr_name_at_stock: 'Surtidor',
+  usr_name_at_deliver: 'Asignó la Entrega', usr_name_delivered: 'Despachador',
   cancel_comment: 'Razón de Cancelación', usr_name_canceled: 'Lo canceló', arrive_at: 'Fecha',
 }
 
@@ -30,7 +32,7 @@ export const ALMACEN_FIELDS = {
   incidencias_agentes: 'Agente con Incidencia', diff_total_at: 'Tiempo Total',
   diff_at_stock_at: 'Recibe / Asignar Surtidor', diff_stocked_at: 'Surtiendo / Surtido',
   diff_surtido_entregado: 'Surtido / Entregado', usr_name_stocked: 'Lo atendió en Almacén',
-  usr_name_at_stock: 'Lo surtió', usr_name_delivered: 'Lo entregó', arrive_at: 'Fecha',
+  usr_name_at_stock: 'Surtidor', usr_name_delivered: 'Despachador', arrive_at: 'Fecha',
 }
 
 export const PISO_FIELDS = {

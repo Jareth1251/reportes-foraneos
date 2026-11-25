@@ -83,7 +83,9 @@ function mapTiendaRow(r) {
     surtidor: r.usr_name_at_stock || '',
     asigno_entrega: r.usr_name_at_deliver || '',
     se_entrego: r.time_delivered_at || '',
-    lo_entrego: r.usr_name_delivered || '',
+    // En checkin quien entrega al cliente es el despachador (mismo rol que
+    // despachador_name en foráneos/página); "Lo Entregó" queda para foráneos.
+    despachador: r.usr_name_delivered || '',
     se_cancelo: r.time_canceled_at || '',
     razon_cancelacion: r.cancel_comment || '',
     motivo_pausa: r.pause_reason_label || '',

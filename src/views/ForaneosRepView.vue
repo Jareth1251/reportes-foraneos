@@ -149,8 +149,8 @@ function isDelivered(o = {}) {
 const deptId    = computed(() => String(auth.user?.departmentId ?? auth.user?.department_id ?? '').trim())
 const isDept007 = computed(() => deptId.value === '007')
 const isGerente = computed(() => deptId.value === '001' || deptId.value === '002')
-// La tab "Reporte Telemarketing" solo la ve Marketing (dept 008).
-const isTelemarketingReport = computed(() => deptId.value === '008')
+// La tab "Reporte Telemarketing" la ven Marketing (dept 008) y Gerencia Comercial (dept 001).
+const isTelemarketingReport = computed(() => ['008', '001'].includes(deptId.value))
 
 const searchText = ref('')
 
@@ -912,7 +912,7 @@ onMounted(fetchOrders)
         </template>
       </div>
 
-      <!-- TAB: REPORTE TELEMARKETING (solo dept 008) -->
+      <!-- TAB: REPORTE TELEMARKETING (dept 008 y 001) -->
       <TelemarketingReportTable
         v-if="activeTab === 'telemarketing' && isTelemarketingReport"
         :date-start="filterFrom"

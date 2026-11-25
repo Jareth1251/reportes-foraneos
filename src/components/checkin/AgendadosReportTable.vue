@@ -61,7 +61,7 @@ function exportAgendados() {
             <th>Cliente</th><th>Pedido</th><th>Cant.</th><th>Estado</th>
             <th>Llegó</th><th>Empezó a surtir</th><th>Se surtió</th>
             <th>Empezó a entregar</th><th>Se entregó</th><th>Se canceló</th>
-            <th>T. almacén</th><th>T. total</th><th>Lo surtió</th><th>Lo entregó</th>
+            <th>T. almacén</th><th>T. total</th><th>Surtidor</th><th>Despachador</th>
             <th>Razón cancelación</th><th>Fecha</th>
           </tr>
         </thead>

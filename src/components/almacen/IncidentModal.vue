@@ -1,10 +1,12 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
   fetchIncidentTypes,
   fetchIncidentsByOrder,
   createIncident,
   fetchIncidentAgents,
+  fetchIncidentOrderContext,
+  RESPONSIBLE_AREAS,
 } from '@/services/incidents'
 
 const props = defineProps({
@@ -35,10 +37,18 @@ const loadingLookup  = ref(false)
 const saving         = ref(false)
 const formError      = ref('')
 
+// Incidencias con cliente
+const action          = ref('')
+const responsibleArea = ref('')
+const orderContext    = ref(null)
+const contextLoading  = ref(false)
+const isCustomer      = computed(() => department.value === 'cliente')
+
 const DEPARTMENT_OPTIONS = [
   { value: 'surtido', label: 'Surtido' },
   { value: 'piso',    label: 'Piso Ventas' },
   { value: 'cajas',   label: 'Cajas' },
+  { value: 'cliente', label: 'Cliente' },
 ]
 
 /* ---------- Cargas ---------- */
@@ -80,12 +90,33 @@ function resetForm() {
   agentId.value        = ''
   cause.value          = ''
   comment.value        = ''
+  action.value         = ''
+  responsibleArea.value = orderContext.value?.responsible_area || ''
+}
+
+// Cliente, asesor, factura, surtidor y despachador del pedido; se pide al
+// buscar el pedido (o al cambiar a "Cliente" si ya se buscó).
+async function loadOrderContext() {
+  const erpNorm = erp.value.trim().toUpperCase()
+  if (!isCustomer.value || !erpNorm) return
+  contextLoading.value = true
+  try {
+    orderContext.value = await fetchIncidentOrderContext(erpNorm)
+    if (!responsibleArea.value) responsibleArea.value = orderContext.value?.responsible_area || ''
+  } catch (e) {
+    console.error('[IncidentModal] error cargando datos del pedido', e)
+    orderContext.value = null
+  } finally {
+    contextLoading.value = false
+  }
 }
 
 
 watch(department, async () => {
   formError.value = ''
-  await Promise.all([loadIncidentTypes(), loadIncidentAgents()])
+  const loads = [loadIncidentTypes(), isCustomer.value ? null : loadIncidentAgents()]
+  if (isCustomer.value && searched.value && !orderContext.value) loads.push(loadOrderContext())
+  await Promise.all(loads)
 })
 
 /* ---------- Watch: apertura del modal ---------- */
@@ -96,6 +127,7 @@ watch(() => props.open, (val) => {
   incidentList.value = []
   searched.value     = false
   formError.value    = ''
+  orderContext.value = null
   department.value   = 'surtido'
   resetForm()
   loadIncidentTypes()
@@ -118,7 +150,10 @@ async function lookupOrder() {
   if (!erpNorm) { formError.value = 'Escribe el número de pedido'; return }
 
   erp.value = erpNorm
+  orderContext.value    = null
+  responsibleArea.value = ''
   loadingLookup.value = true
+  loadOrderContext()
   try {
     const res = await fetchIncidentsByOrder(erpNorm)
     orderInfo.value    = findOrder(erpNorm)
@@ -138,9 +173,15 @@ async function addIncident() {
   const erpNorm = erp.value.trim().toUpperCase()
   formError.value = ''
   if (!erpNorm)              { formError.value = 'Escribe el número de pedido'; return }
-  if (!incidentTypeId.value) { formError.value = 'Selecciona el tipo de error'; return }
-  if (!agentId.value)        { formError.value = 'Selecciona el agente que provocó el error'; return }
-  if (!cause.value.trim())   { formError.value = 'Describe la causa del error'; return }
+  if (!incidentTypeId.value) { formError.value = isCustomer.value ? 'Selecciona el tipo de incidencia' : 'Selecciona el tipo de error'; return }
+  if (isCustomer.value) {
+    if (!cause.value.trim())     { formError.value = 'Describe la incidencia del cliente'; return }
+    if (!action.value.trim())    { formError.value = 'Escribe la acción que se tomó'; return }
+    if (!responsibleArea.value)  { formError.value = 'Selecciona el área responsable'; return }
+  } else {
+    if (!agentId.value)        { formError.value = 'Selecciona el agente que provocó el error'; return }
+    if (!cause.value.trim())   { formError.value = 'Describe la causa del error'; return }
+  }
 
   const agent = agentList.value.find(a => String(a.id) === String(agentId.value))
   const user  = props.user || {}
@@ -157,6 +198,18 @@ async function addIncident() {
       agent_name:       agent?.name ? String(agent.name).trim().toUpperCase() : null,
       created_by:       user.sales_person_id || user.salesPersonId || null,
       created_by_name:  user.name ? String(user.name).trim().toUpperCase() : null,
+      site:             user.site != null ? String(user.site) : null,
+    }
+    if (isCustomer.value) {
+      Object.assign(payload, {
+        agent_id:         null,
+        agent_name:       null,
+        action:           action.value.trim(),
+        responsible_area: responsibleArea.value,
+        customer_name:    orderContext.value?.customer_name || orderInfo.value?.customer_name || null,
+        sales_person:     orderContext.value?.sales_person || orderInfo.value?.sales_person || null,
+        invoice_id:       orderContext.value?.invoice_id || null,
+      })
     }
 
     const res = await createIncident(payload)
@@ -216,6 +269,21 @@ async function addIncident() {
           El pedido no está en el tablero actual; la incidencia se registra igual por número de pedido.
         </div>
 
+        <div v-if="isCustomer && (contextLoading || orderContext)"
+             class="bg-base-200 border border-base-300 rounded-lg px-3.5 py-2.5 text-xs mb-3.5">
+          <div v-if="contextLoading" class="flex items-center gap-2 text-base-content/60">
+            <span class="loading loading-spinner loading-xs"></span> Consultando datos del pedido…
+          </div>
+          <div v-else class="grid grid-cols-2 gap-x-4 gap-y-1">
+            <div><span class="text-base-content/50">Cliente:</span> <b>{{ orderContext.customer_name || '—' }}</b></div>
+            <div><span class="text-base-content/50">Asesor:</span> <b>{{ orderContext.sales_person || '—' }}</b></div>
+            <div><span class="text-base-content/50">Factura:</span> <b>{{ orderContext.invoice_id || '—' }}</b></div>
+            <div><span class="text-base-content/50">Origen:</span> <b>{{ (orderContext.source || '—').toUpperCase() }}</b></div>
+            <div><span class="text-base-content/50">Surtidor:</span> <b>{{ orderContext.surtidor_name || '—' }}</b></div>
+            <div><span class="text-base-content/50">Despachador:</span> <b>{{ orderContext.despachador_name || '—' }}</b></div>
+          </div>
+        </div>
+
         <div v-if="incidentList.length"
              class="bg-base-200 border border-base-300 rounded-lg px-3.5 py-1 mb-3.5">
           <div class="lbl mt-2.5">Incidencias ya registradas para este pedido</div>
@@ -228,7 +296,10 @@ async function addIncident() {
             <div class="text-sm text-base-content/80">
               {{ inc.cause }}<span v-if="inc.comment && inc.comment !== inc.cause" class="text-base-content/50"> — {{ inc.comment }}</span>
             </div>
-            <div class="text-[0.72rem] text-base-content/50 mt-0.5">
+            <div v-if="inc.department === 'cliente'" class="text-[0.72rem] text-base-content/50 mt-0.5">
+              Acción: <b>{{ inc.action || '—' }}</b> · Responsable: {{ (inc.responsible_area || '—').toUpperCase() }} · Registró: {{ inc.created_by_name || 'Sin usuario' }}
+            </div>
+            <div v-else class="text-[0.72rem] text-base-content/50 mt-0.5">
               Agente: <b>{{ inc.agent_name || 'Sin agente' }}</b> · Registró: {{ inc.created_by_name || 'Sin usuario' }}
             </div>
           </div>
@@ -245,7 +316,7 @@ async function addIncident() {
           </label>
 
           <label class="block">
-            <span class="lbl">Tipo de error</span>
+            <span class="lbl">{{ isCustomer ? 'Tipo de incidencia' : 'Tipo de error' }}</span>
             <select v-model="incidentTypeId"
                     class="select select-bordered select-sm w-full"
                     :disabled="loadingTypes">
@@ -258,7 +329,15 @@ async function addIncident() {
             </select>
           </label>
 
-          <label class="block">
+          <label v-if="isCustomer" class="block">
+            <span class="lbl">Responsable</span>
+            <select v-model="responsibleArea" class="select select-bordered select-sm w-full">
+              <option value="" disabled>Selecciona el área</option>
+              <option v-for="a in RESPONSIBLE_AREAS" :key="a.value" :value="a.value">{{ a.label }}</option>
+            </select>
+          </label>
+
+          <label v-else class="block">
             <span class="lbl">Agente que provocó el error</span>
             <select v-model="agentId"
                     class="select select-bordered select-sm w-full"
@@ -273,13 +352,20 @@ async function addIncident() {
           </label>
 
           <label class="block sm:col-span-2">
-            <span class="lbl">Causa del error</span>
-            <textarea v-model="cause" rows="3" placeholder="Describe qué originó el error"
+            <span class="lbl">{{ isCustomer ? 'Descripción de la incidencia' : 'Causa del error' }}</span>
+            <textarea v-model="cause" rows="3"
+                      :placeholder="isCustomer ? 'Ej. Pidió 18000 gris jaspe y le llegó 18500' : 'Describe qué originó el error'"
+                      class="textarea textarea-bordered w-full resize-y" />
+          </label>
+
+          <label v-if="isCustomer" class="block sm:col-span-2">
+            <span class="lbl">Acción</span>
+            <textarea v-model="action" rows="2" placeholder="Ej. Se hace el cambio / Se envían las piezas faltantes"
                       class="textarea textarea-bordered w-full resize-y" />
           </label>
 
           <label class="block sm:col-span-2">
-            <span class="lbl">Comentario <span class="font-normal text-base-content/40 normal-case">(opcional)</span></span>
+            <span class="lbl">{{ isCustomer ? 'Comentarios' : 'Comentario' }} <span class="font-normal text-base-content/40 normal-case">(opcional)</span></span>
             <textarea v-model="comment" rows="3" placeholder="Comentario adicional"
                       class="textarea textarea-bordered w-full resize-y" />
           </label>
