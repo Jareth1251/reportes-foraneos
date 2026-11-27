@@ -142,6 +142,13 @@ const router = createRouter({
       beforeEnter: guardModuleRoute('pantalla-comedor'),
     },
     {
+      path: '/dias-no-laborables',
+      name: 'dias-no-laborables',
+      component: () => import('@/views/BusinessCalendarView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: guardModuleRoute('dias-no-laborables'),
+    },
+    {
       path: '/devoluciones-tienda',
       name: 'devoluciones-tienda',
       component: () => import('@/views/StoreReturnsView.vue'),

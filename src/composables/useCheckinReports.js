@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { fmtTime, timeDiff } from '@/utils/reportTime'
+import { loadBusinessHoursExceptions } from '@/services/businessHours'
 import { buildGroupedOrderString } from '@/utils/pedidos'
 
 // Caché de montos a nivel módulo (sobrevive entre fetchDetail y entre vistas
@@ -184,6 +185,7 @@ export function useCheckinReports(site) {
 
     loading.value = true
     try {
+      await loadBusinessHoursExceptions()
       const params = new URLSearchParams({ date: dateStart.value, end_date: dateEnd.value })
       if (site.value) params.append('site', site.value)
 
