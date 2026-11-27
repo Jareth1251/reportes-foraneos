@@ -351,6 +351,9 @@ async function attachIncidents(entries) {
       .filter(Boolean)
       .join('; ')
     row.incidencias_agentes = [...new Set(list.map((i) => i.agent_name).filter(Boolean))].join(', ')
+    // Lista cruda (no enumerable: no se muestra ni se exporta) para el
+    // Tablero de Almacén, que cuenta errores de surtido por tipo y agente.
+    Object.defineProperty(row, '_incidents', { value: list, writable: true, configurable: true })
   }
 }
 

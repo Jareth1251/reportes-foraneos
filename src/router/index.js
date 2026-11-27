@@ -100,6 +100,13 @@ const router = createRouter({
       beforeEnter: guardModuleRoute('reporte-maestro'),
     },
     {
+      path: '/tablero-almacen',
+      name: 'tablero-almacen',
+      component: () => import('@/views/WarehouseDashboardView.vue'),
+      meta: { requiresAuth: true },
+      beforeEnter: guardModuleRoute('tablero-almacen'),
+    },
+    {
       path: '/incidencias-clientes',
       name: 'incidencias-clientes',
       component: () => import('@/views/CustomerIncidentsView.vue'),
