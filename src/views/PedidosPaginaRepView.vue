@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { api } from '@/config/axios'
 import { SESSION_KEY } from '@/router'
 import { fmtTime, timeDiff } from '@/utils/reportTime'
+import { loadBusinessHoursExceptions } from '@/services/businessHours'
 import { exportToExcel } from '@/utils/excelExport'
 import { PEDIDOS_PAGINA_FIELDS } from '@/components/pedidosPagina/reportFields'
 
@@ -105,6 +106,7 @@ function transformRow(order) {
 async function fetchOrders() {
   loading.value = true
   try {
+    await loadBusinessHoursExceptions()
     // El backend de /admin/orders/paid no pagina: siempre regresa todos los
     // pedidos que matchean el rango de fechas en una sola respuesta (ver
     // comentario en OrderController::index). No hay que iterar páginas.

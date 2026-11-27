@@ -17,6 +17,7 @@ export const MODULE_DEFS = {
   'videos-pantallas':       { key: 'videos-pantallas',       icon: '🎬', label: 'Videos de Pantallas',        desc: 'Subir, ordenar y activar los videos promocionales que se intercalan con los turnos en las pantallas.', color: '#C2410C', bg: '#FFEDD5', border: '#FDBA74' },
   'pantalla-comedor':       { key: 'pantalla-comedor',       icon: '📺', label: 'Pantalla Comedor',           desc: 'Armar la lista de comunicados, cumpleaños y videos de YouTube que se reproducen en la TV del comedor.', color: '#0E7490', bg: '#CFFAFE', border: '#67E8F9' },
   'devoluciones-tienda':    { key: 'devoluciones-tienda',    icon: '↩️', label: 'Devoluciones Tienda',        desc: 'Registrar devoluciones: captura el pedido y QAD trae vendedor, cliente, factura y productos.', color: '#B91C1C', bg: '#FEE2E2', border: '#FCA5A5' },
+  'dias-no-laborables':     { key: 'dias-no-laborables',     icon: '📅', label: 'Días no laborables',         desc: 'Paros programados y puentes que aplican a la empresa: esos días no cuentan en los tiempos de turnos y foráneos.', color: '#4338CA', bg: '#E0E7FF', border: '#A5B4FC' },
   'agentes-almacen':        { key: 'agentes-almacen',        icon: '👤', label: 'Agentes de Almacén',         desc: 'Alta, edición y baja de agentes que surten y despachan pedidos foráneos.',                color: '#455A64', bg: '#ECEFF1', border: '#B0BEC5' },
 }
 
@@ -27,7 +28,7 @@ const ALL_REPORTS = ['foraneos-reporte', 'checkin-reporte', 'pedidos-pagina-repo
 // backend (WarehouseAgentController::MANAGER_SCOPES).
 const DEPT_MODULE_KEYS = {
   '001': ['foraneos', 'almacen', ...ALL_REPORTS, 'incidencias-clientes', 'cajeras-sucursal', 'inventario-conteo', 'videos-pantallas', 'pantalla-comedor'],
-  '002': ['foraneos', 'almacen', ...ALL_REPORTS, 'incidencias-clientes', 'cajeras-sucursal', 'inventario-conteo', 'videos-pantallas', 'pantalla-comedor'],
+  '002': ['foraneos', 'almacen', ...ALL_REPORTS, 'incidencias-clientes', 'cajeras-sucursal', 'inventario-conteo', 'videos-pantallas', 'pantalla-comedor', 'dias-no-laborables'],
   '003': [...ALL_REPORTS, 'inventario-conteo'],
   '004': ['cajas', ...ALL_REPORTS, 'inventario-conteo'],
   '005': [...ALL_REPORTS, 'inventario-conteo'],

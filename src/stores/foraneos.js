@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '@/config/axios'
+import { loadBusinessHoursExceptions } from '@/services/businessHours'
 
 export const useForaneosStore = defineStore('foraneos', () => {
   const orders       = ref([])
@@ -48,7 +49,8 @@ export const useForaneosStore = defineStore('foraneos', () => {
     loading.value = true
     error.value   = null
     try {
-      const { data } = await api.get(endpoint)
+      // El calendario (paros/puentes) va junto: el contador de las tarjetas lo usa.
+      const [{ data }] = await Promise.all([api.get(endpoint), loadBusinessHoursExceptions()])
       // almacen2 devuelve { success, orders: [] }, los demás devuelven [] directo
       orders.value = Array.isArray(data) ? data : (data.orders ?? [])
       lastFetch.value = Date.now()

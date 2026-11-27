@@ -1,3 +1,5 @@
+import { businessMs } from './businessHours'
+
 export function normalize(str) {
   return str?.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim() || ''
 }
@@ -10,12 +12,12 @@ export function isCreatedByFloorAgent(row) {
   return creator !== '' && creator !== 'PAGINA WEB'
 }
 
+// Diferencia en horario laboral (ver businessHours.js): fuera de horario,
+// domingos y festivos no cuentan.
 export function timeDiff(a, b) {
   if (!a || !b) return null
-  const da = new Date(a)
-  const db = new Date(b)
-  if (isNaN(da) || isNaN(db)) return null
-  let ms = db - da
+  let ms = businessMs(a, b)
+  if (isNaN(ms)) return null
   const h = Math.floor(ms / 3600000).toString().padStart(2, '0')
   ms %= 3600000
   const m = Math.floor(ms / 60000).toString().padStart(2, '0')

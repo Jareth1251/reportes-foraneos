@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { api } from '@/config/axios'
 import { fmtTime, timeDiff } from '@/utils/reportTime'
+import { businessMs } from '@/utils/businessHours'
 import { MAESTRO_FIELDS } from '@/components/reporteMaestro/reportFields'
 import { useCheckinReports } from './useCheckinReports'
 
@@ -49,7 +50,7 @@ function msToHms(ms) {
 // Tiempo Total sin el tiempo en pausa; vacío si el turno no se ha entregado.
 function totalSinPausa(startAt, deliveredAt, pausedMs) {
   if (!startAt || !deliveredAt) return ''
-  const ms = new Date(deliveredAt) - new Date(startAt)
+  const ms = businessMs(startAt, deliveredAt)
   return Number.isNaN(ms) ? '' : msToHms(ms - pausedMs)
 }
 

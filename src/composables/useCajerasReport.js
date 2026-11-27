@@ -1,6 +1,8 @@
 import { ref, computed } from 'vue'
 import { api } from '@/config/axios'
 import { toTime, getAverageTime, timeDiff } from '@/utils/reportTime'
+import { businessMs } from '@/utils/businessHours'
+import { loadBusinessHoursExceptions } from '@/services/businessHours'
 import { collapseConsolidatedPedidos, buildGroupedOrderString } from '@/utils/pedidos'
 import { checkinInvoicedAt } from '@/utils/checkins'
 
@@ -91,6 +93,7 @@ export function useCajerasReport(dateStart, dateEnd) {
   async function fetchCheckinsForCajeras() {
     checkinsLoading.value = true
     try {
+      await loadBusinessHoursExceptions()
       // site=3000 -- mismo site que /node-api/users?site=3000 (loadSiteCajeras). Sin este
       // filtro el backend trae checkins de TODOS los sites mezclados (CheckinRepView nunca
       // filtra por site), inflando los totales con gente de otros sites. Ver investigación
@@ -123,7 +126,7 @@ export function useCajerasReport(dateStart, dateEnd) {
   async function fetchForaneosForCajeras() {
     foraneosLoading.value = true
     try {
-      await loadSiteCajeras()
+      await Promise.all([loadSiteCajeras(), loadBusinessHoursExceptions()])
       const { data } = await api.get('/foraneos/cajeras-report', {
         params: {
           include_returned: 0,
@@ -252,19 +255,17 @@ export function useCajerasReport(dateStart, dateEnd) {
       if (!rawCajera) continue
       if (String(o.order_status || '').toUpperCase() === 'CANCELADO') continue
       if (!o.facturado_at || !o.created_at) continue
-      const facturadoAt = new Date(o.facturado_at).getTime()
-      const createdAt = new Date(o.created_at).getTime()
-      const totalSec = (facturadoAt - createdAt) / 1000
-      if (totalSec < 0) continue
+      // Solo horario laboral: el reloj se detiene fuera de horario/domingos/festivos.
+      const totalSec = businessMs(o.created_at, o.facturado_at) / 1000
+      if (!(totalSec >= 0)) continue
       const cajera = canonicalName(rawCajera)
       if (!cajera) continue
       if (!foraneosGroups[cajera]) foraneosGroups[cajera] = { espera: [], atencion: [], total: [] }
       foraneosGroups[cajera].total.push(totalSec)
 
       if (o.atendido_at) {
-        const atendidoAt = new Date(o.atendido_at).getTime()
-        const esperaSec = (atendidoAt - createdAt) / 1000
-        const atencionSec = (facturadoAt - atendidoAt) / 1000
+        const esperaSec = businessMs(o.created_at, o.atendido_at) / 1000
+        const atencionSec = businessMs(o.atendido_at, o.facturado_at) / 1000
         if (esperaSec >= 0) foraneosGroups[cajera].espera.push(esperaSec)
         if (atencionSec >= 0) foraneosGroups[cajera].atencion.push(atencionSec)
       }
